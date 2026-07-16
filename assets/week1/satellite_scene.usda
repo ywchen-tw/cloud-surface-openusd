@@ -1,0 +1,18 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1000
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    kind = "assembly"
+)
+{
+    def Xform "Environment" (
+        prepend references = @environment.usda@
+    )
+    {
+    }
+}
+

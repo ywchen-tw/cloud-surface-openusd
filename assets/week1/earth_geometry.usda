@@ -1,0 +1,14 @@
+#usda 1.0
+(
+    defaultPrim = "Earth"
+    metersPerUnit = 1000
+    upAxis = "Z"
+)
+
+def Sphere "Earth" (
+    kind = "component"
+)
+{
+    double radius = 6371
+}
+

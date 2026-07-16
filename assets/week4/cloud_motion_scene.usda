@@ -1,0 +1,47 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    endTimeCode = 20
+    metersPerUnit = 1000
+    startTimeCode = 1
+    timeCodesPerSecond = 4
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    kind = "assembly"
+)
+{
+    def Xform "Scene" (
+        prepend references = @../week2/clouds_move.usda@
+    )
+    {
+        over "MovingCloudSystem" (
+            variants = {
+                string motion_mode = "manual_transform"
+            }
+        )
+        {
+        }
+    }
+
+    def Xform "Camera" (
+        kind = "group"
+    )
+    {
+        def Camera "MainCamera"
+        {
+            float focalLength = 28
+            float horizontalAperture = 24
+            float verticalAperture = 18
+            matrix4d xformOp:transform = ( (0.8621626179780919, 0.5066316414922808, 0, 0), (-0.18270327795395855, 0.3109161045883154, 0.932711470998672, -0), (0.47254114359073707, -0.8041489636544121, 0.36062350431924667, 0), (82, -72, 53.99999999999999, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+    }
+
+    def Scope "RenderNotes"
+    {
+        custom string description = "Final Week 4 cloud-motion composition. Scrub frames 1-20 and render to renders/final.mp4."
+    }
+}
+

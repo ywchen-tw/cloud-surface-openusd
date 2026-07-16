@@ -1,0 +1,183 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1000
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    kind = "assembly"
+)
+{
+    def Scope "Materials" (
+        kind = "group"
+    )
+    {
+        def Material "OceanMaterial"
+        {
+            token outputs:surface.connect = </World/Materials/OceanMaterial/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.02, 0.16, 0.48)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.18
+                token outputs:surface
+            }
+        }
+
+        def Material "LandMaterial"
+        {
+            token outputs:surface.connect = </World/Materials/LandMaterial/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.28, 0.46, 0.18)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.75
+                token outputs:surface
+            }
+        }
+
+        def Material "CloudMaterial"
+        {
+            token outputs:surface.connect = </World/Materials/CloudMaterial/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.92, 0.95, 1)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.35
+                token outputs:surface
+            }
+        }
+    }
+
+    def Xform "Surfaces" (
+        kind = "group"
+        variants = {
+            string surface_mode = "split_ocean_land"
+        }
+        prepend variantSets = "surface_mode"
+    )
+    {
+        def Mesh "Ocean"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </World/Materials/OceanMaterial>
+            point3f[] points = [(0, 0, 0), (25, 0, 0), (25, 50, 0), (0, 50, 0)]
+            color3f[] primvars:displayColor = [(0.02, 0.16, 0.48)]
+        }
+
+        def Mesh "Land"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </World/Materials/LandMaterial>
+            point3f[] points = [(25, 0, 0), (50, 0, 0), (50, 50, 0), (25, 50, 0)]
+            color3f[] primvars:displayColor = [(0.28, 0.46, 0.18)]
+        }
+        variantSet "surface_mode" = {
+            "land_only" {
+                over "Ocean"
+                {
+                    token visibility = "invisible"
+                }
+
+                over "Land"
+                {
+                    token visibility = "inherited"
+                }
+
+            }
+            "ocean_only" {
+                over "Ocean"
+                {
+                    token visibility = "inherited"
+                }
+
+                over "Land"
+                {
+                    token visibility = "invisible"
+                }
+
+            }
+            "split_ocean_land" {
+                over "Ocean"
+                {
+                    token visibility = "inherited"
+                }
+
+                over "Land"
+                {
+                    token visibility = "inherited"
+                }
+
+            }
+        }
+    }
+
+    def Xform "Atmosphere" (
+        kind = "group"
+        variants = {
+            string atmosphere_bounds = "visible"
+        }
+        prepend variantSets = "atmosphere_bounds"
+    )
+    {
+        def Cube "DomainBounds"
+        {
+            color3f[] primvars:displayColor = [(0.55, 0.78, 1)]
+            float[] primvars:displayOpacity = [0.12]
+            double size = 1
+            float3 xformOp:scale = (50, 50, 25)
+            double3 xformOp:translate = (25, 25, 12.5)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+        variantSet "atmosphere_bounds" = {
+            "hidden" {
+                token visibility = "invisible"
+
+            }
+            "visible" {
+                token visibility = "inherited"
+
+            }
+        }
+    }
+
+    def Xform "Clouds" (
+        kind = "group"
+        variants = {
+            string cloud_visibility = "visible"
+        }
+        prepend variantSets = "cloud_visibility"
+    )
+    {
+        def Points "StaticCloud"
+        {
+            rel material:binding = </World/Materials/CloudMaterial>
+            point3f[] points = [(12, 23, 14), (12, 26.5, 14), (15.4, 19.5, 14), (15.4, 23, 11.5), (15.4, 23, 14), (15.4, 26.5, 11.5), (15.4, 26.5, 14), (15.4, 30, 11.5), (15.4, 30, 14), (18.8, 19.5, 11.5), (18.8, 19.5, 14), (18.8, 23, 11.5), (18.8, 23, 14), (18.8, 26.5, 11.5), (18.8, 26.5, 14), (18.8, 30, 11.5), (18.8, 30, 14), (22.2, 19.5, 11.5), (22.2, 19.5, 14), (22.2, 23, 11.5), (22.2, 23, 14), (22.2, 26.5, 11.5), (22.2, 26.5, 14), (22.2, 30, 11.5), (22.2, 30, 14), (25.6, 19.5, 11.5), (25.6, 19.5, 14), (25.6, 23, 11.5), (25.6, 23, 14), (25.6, 26.5, 11.5), (25.6, 26.5, 14), (25.6, 30, 11.5), (25.6, 30, 14), (29, 19.5, 11.5), (29, 19.5, 14), (29, 23, 11.5), (29, 23, 14), (29, 26.5, 11.5), (29, 26.5, 14), (29, 30, 11.5), (29, 30, 14), (32.4, 19.5, 14), (32.4, 23, 11.5), (32.4, 23, 14), (32.4, 26.5, 11.5), (32.4, 26.5, 14), (32.4, 30, 11.5), (32.4, 30, 14), (35.8, 23, 14), (35.8, 26.5, 11.5), (35.8, 26.5, 14)]
+            float[] primvars:density = [0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55] (
+                interpolation = "vertex"
+            )
+            color3f[] primvars:displayColor = [(0.92, 0.95, 1)]
+            float[] widths = [1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6]
+        }
+        variantSet "cloud_visibility" = {
+            "hidden" {
+                token visibility = "invisible"
+
+            }
+            "visible" {
+                token visibility = "inherited"
+
+            }
+        }
+    }
+}
+

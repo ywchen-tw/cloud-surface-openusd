@@ -1,0 +1,74 @@
+# macOS / editor noise
+.DS_Store
+._*
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Build outputs
+build/
+dist/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+Makefile
+
+# Local scientific data: keep large/source/processed datasets out of GitHub.
+data/*
+!data/.gitkeep
+!data/README.md
+
+# Generated volumetric assets
+*.vdb
+*.nvdb
+*.bgeo
+*.bgeo.sc
+*.f32
+*.raw
+
+# Large science/data containers
+*.nc
+*.nc4
+*.h5
+*.hdf
+*.hdf5
+*.npz
+*.npy
+*.zarr/
+
+# Render outputs and videos
+renders/*
+!renders/.gitkeep
+!renders/README.md
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.exr
+*.mp4
+*.mov
+*.avi
+
+# USD/tool temporary files
+*.usdtmp
+*.tmp
+*.log

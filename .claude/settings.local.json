@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import pxr; print\\(pxr.__file__\\)\")",
+      "Bash(conda info *)",
+      "Bash(pip list *)",
+      "Bash(pip3 list *)",
+      "Bash(conda list *)",
+      "Bash(otool -L /Users/wen/programing/OpenUSD_system/build/bin/usdchecker)",
+      "Bash(otool -L /Users/wen/programing/OpenUSD_system/build/lib/libpxr_tf.dylib)",
+      "Bash(otool -L /Users/wen/programing/OpenUSD_system/build/lib/libusd_python.dylib)",
+      "Read(//Users/wen/programing/OpenUSD_system/build/lib/**)",
+      "Bash(conda run *)",
+      "Read(//Users/wen/opt/anaconda3/envs/openusd/**)",
+      "Read(//Users/wen/anaconda3/envs/openusd/**)",
+      "Read(//Users/wen/miniconda3/envs/openusd/bin/**)",
+      "Bash(otool -l /Users/wen/programing/OpenUSD_system/build/lib/libusd_python.dylib)"
+    ]
+  }
+}

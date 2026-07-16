@@ -1,0 +1,31 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    upAxis = "Z"
+)
+
+def Xform "World"
+{
+    def Points "Points"
+    {
+        point3f[] points.timeSamples = {
+            0: [(0, 150, 0), (20, 150, 10), (-20, 150, -10)],
+            1: [(50, 150, 30), (70, 150, 40)],
+            2: [(120, 150, 60), (150, 150, 80)],
+        }
+        color3f[] primvars:displayColor (
+            interpolation = "vertex"
+        )
+        color3f[] primvars:displayColor.timeSamples = {
+            0: [(0, 0, 1), (0.6666667, 0.6666667, 0.33333334), (0.33333334, 0.33333334, 0.6666667)],
+            1: [(1, 1, 2.220446e-16), (1, 0.6666667, 0)],
+            2: [(1, 0.33333334, 0), (1, 0, 0)],
+        }
+        float[] widths.timeSamples = {
+            0: [1, 1, 1],
+            1: [1, 1],
+            2: [1, 1],
+        }
+    }
+}
+
