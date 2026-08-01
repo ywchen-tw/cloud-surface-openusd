@@ -83,11 +83,20 @@ with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
    extra driver flags):
    `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 4096 NadirCamera 128 128 "--exr --world-strength 0 --flat-albedo 0.05"`
    -> writes frame_0001.exr + frame_0001.npy (radiance array).
-4. **Run `validation/compare_ear3t.py`** (er3t env, CPU): scaffolded 2026-08-01;
-   check the VERIFY-marked lines (cld object field names, HG g pass-through,
-   azimuth convention) against the installed er3t before first run:
-   `conda run -n er3t python validation/compare_ear3t.py --run-ear3t --usd-npy $OPENUSD_CLD_DATAROOT/renders/les_cloud_scene_cycles_NadirCamera/frame_0001.npy`
-   Outputs the side-by-side figure + RMSE/Pearson metrics JSON (the headline).
+4. ~~First USD-vs-EaR3T comparison~~ DONE 2026-08-01: **r = 0.756, rel RMSE
+   45%** on the identical field; panels align cluster-for-cluster. Figure +
+   metrics at `$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t_*`.
+   The EaR3T h5 is cached there (`ear3t_rad_3d.h5`) — re-compare without
+   re-running MC via `--ear3t-h5`. sbatch wrappers: `repro/curc/compare_ear3t*.sbatch`.
+5. **Close the physics gap** (largest first):
+   - USD shadows are true zero (sun-only scene, no molecular atmosphere);
+     EaR3T fills shadows with Rayleigh skylight (~0.02). Options: calibrated
+     uniform world strength in Cycles, or quantify-and-document as a known
+     renderer limitation (postmortem angle).
+   - Check shadow-displacement dipoles in the diff panel for a residual
+     sun-azimuth convention mismatch (USD az-from-+x vs MCARaTS saa).
+   - More photons (1e8 -> 1e9) + higher render samples to shrink MC noise.
+6. Then: 20-frame fly-through + one-pager leading with the validation figure.
 3. **`validation/compare_ear3t.py`** (not started): run EaR3T 3D-RT on
    `data/processed/cloud_field_64x64x32.npz` (`ext` + `ssa` + `asymmetry_g`
    keys) in the `er3t` env at the SAME SZA 30°/az 40° geometry, compare with
