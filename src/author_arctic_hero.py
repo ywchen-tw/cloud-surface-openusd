@@ -14,17 +14,17 @@ Render (GPU hero route, 20 frames -> preview.mp4):
   sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_arctic_scene.usda 1 20 256
 """
 
-import math
 import os
 import sys
 
-from pxr import Gf, Usd, UsdGeom, UsdLux
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from author_cloud_usd import (
-    ROOT, SUN_SAA_DEG, bind, create_cloud_volume, load_domain,
-    look_at_matrix, make_preview_material,
+    ROOT, SUN_SAA_DEG, bind, create_cloud_volume, load_domain, look_at_matrix,
 )
+
+ALBEDO_TEX_REL = "../../data/processed/arctic_albedo_texture.png"  # gen_arctic_albedo.py
 
 OUT_USD = os.path.join(ROOT, "assets", "phase8", "les_cloud_arctic_scene.usda")
 SUN_SZA_DEG = 55.0   # polar low sun, long shadows
@@ -32,67 +32,42 @@ FRAMES = 20
 FPS = 8              # matches the ffmpeg preview assembly in the sbatch scripts
 
 
-def polygon(stage, path, pts_xy, z, mat):
-    mesh = UsdGeom.Mesh.Define(stage, path)
-    mesh.CreatePointsAttr([Gf.Vec3f(x, y, z) for x, y in pts_xy])
-    mesh.CreateFaceVertexCountsAttr([len(pts_xy)])
-    mesh.CreateFaceVertexIndicesAttr(list(range(len(pts_xy))))
-    xs = [p[0] for p in pts_xy]
-    ys = [p[1] for p in pts_xy]
-    mesh.CreateExtentAttr([Gf.Vec3f(min(xs), min(ys), z), Gf.Vec3f(max(xs), max(ys), z)])
-    bind(mesh, mat)
-
-
-def ellipse_pts(cx, cy, rx, ry, n=36, jitter=0.0, seed=0):
-    pts = []
-    for k in range(n):
-        a = 2 * math.pi * k / n
-        j = 1.0 + jitter * math.sin(seed + 3 * a) if jitter else 1.0
-        pts.append((cx + rx * j * math.cos(a), cy + ry * j * math.sin(a)))
-    return pts
-
-
 def create_arctic_surface(stage, lo, hi):
-    mats = {
-        "ocean": make_preview_material(stage, "/World/Materials/OpenWater", (0.015, 0.055, 0.11), roughness=0.55),
-        "floe": make_preview_material(stage, "/World/Materials/Floe", (0.70, 0.76, 0.80)),
-        "sheet": make_preview_material(stage, "/World/Materials/SeaIceSheet", (0.78, 0.82, 0.85)),
-        "snow": make_preview_material(stage, "/World/Materials/SnowBand", (0.90, 0.92, 0.95)),
-        "pond": make_preview_material(stage, "/World/Materials/MeltPond", (0.12, 0.34, 0.44), roughness=0.35),
-    }
-    UsdGeom.Xform.Define(stage, "/World/Surface")
+    """One quad draped with the procedural albedo texture (gen_arctic_albedo.py).
 
-    # Open water base across the whole tiled domain (albedo ~0.06).
-    polygon(stage, "/World/Surface/OpenWater",
-            [(lo, lo), (hi, lo), (hi, hi), (lo, hi)], 0.0, mats["ocean"])
+    Flat constant-color polygons read as paper cutouts at any resolution;
+    realism comes from multi-scale variation in the albedo map itself —
+    which is also the physically meaningful quantity for the Arctic story.
+    """
+    mat = UsdShade.Material.Define(stage, "/World/Materials/ArcticAlbedo")
+    st_reader = UsdShade.Shader.Define(stage, "/World/Materials/ArcticAlbedo/StReader")
+    st_reader.CreateIdAttr("UsdPrimvarReader_float2")
+    st_reader.CreateInput("varname", Sdf.ValueTypeNames.String).Set("st")
+    tex = UsdShade.Shader.Define(stage, "/World/Materials/ArcticAlbedo/AlbedoTex")
+    tex.CreateIdAttr("UsdUVTexture")
+    tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(ALBEDO_TEX_REL)
+    tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
+        st_reader.ConnectableAPI(), "result")
+    tex.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("clamp")
+    tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("clamp")
+    surf = UsdShade.Shader.Define(stage, "/World/Materials/ArcticAlbedo/PreviewSurface")
+    surf.CreateIdAttr("UsdPreviewSurface")
+    surf.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(
+        tex.ConnectableAPI(), "rgb")
+    surf.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.7)
+    surf.CreateInput("specular", Sdf.ValueTypeNames.Float).Set(0.02)
+    mat.CreateSurfaceOutput().ConnectToSource(surf.ConnectableAPI(), "surface")
 
-    # Consolidated sea-ice sheet north of a jagged ice edge (albedo ~0.8).
-    polygon(stage, "/World/Surface/SeaIceSheet",
-            [(lo, 10500), (-2500, 9300), (1500, 10800), (5200, 9100),
-             (8600, 10400), (hi, 9600), (hi, hi), (lo, hi)], 2.0, mats["sheet"])
-
-    # Snow band on the upper sheet (albedo ~0.9).
-    polygon(stage, "/World/Surface/SnowBand",
-            [(lo, 11800), (2000, 11300), (7000, 12000), (hi, 11400),
-             (hi, hi), (lo, hi)], 3.0, mats["snow"])
-
-    # Marginal-ice-zone floes drifting in open water (albedo ~0.75).
-    floes = [(-3500, 7200, 950), (500, 6800, 700), (3800, 7700, 1150),
-             (7600, 6500, 820), (10800, 7900, 620), (-600, 4400, 520),
-             (6100, 4100, 460), (12000, 5600, 700)]
-    for k, (cx, cy, r) in enumerate(floes):
-        polygon(stage, f"/World/Surface/Floe_{k:02d}",
-                ellipse_pts(cx, cy, r, 0.8 * r, n=9, jitter=0.18, seed=k),
-                2.0, mats["floe"])
-
-    # Melt ponds on the ice sheet (albedo ~0.3, teal — the research signal).
-    ponds = [(0, 11400, 620, 340), (4200, 11000, 820, 430),
-             (8300, 11600, 520, 300), (-3100, 11200, 430, 260),
-             (11000, 10800, 560, 330)]
-    for k, (cx, cy, rx, ry) in enumerate(ponds):
-        polygon(stage, f"/World/Surface/MeltPond_{k:02d}",
-                ellipse_pts(cx, cy, rx, ry, n=28, jitter=0.10, seed=10 + k),
-                4.0, mats["pond"])
+    mesh = UsdGeom.Mesh.Define(stage, "/World/Surface/ArcticSurface")
+    mesh.CreatePointsAttr([Gf.Vec3f(lo, lo, 0), Gf.Vec3f(hi, lo, 0),
+                           Gf.Vec3f(hi, hi, 0), Gf.Vec3f(lo, hi, 0)])
+    mesh.CreateFaceVertexCountsAttr([4])
+    mesh.CreateFaceVertexIndicesAttr([0, 1, 2, 3])
+    mesh.CreateExtentAttr([Gf.Vec3f(lo, lo, 0), Gf.Vec3f(hi, hi, 0)])
+    UsdGeom.PrimvarsAPI(mesh).CreatePrimvar(
+        "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.varying
+    ).Set([(0, 0), (1, 0), (1, 1), (0, 1)])
+    bind(mesh, mat)
 
 
 def create_sun(stage):

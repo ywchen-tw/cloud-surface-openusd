@@ -15,253 +15,52 @@ def Xform "World" (
 {
     def "Materials"
     {
-        def Material "OpenWater"
+        def Material "ArcticAlbedo"
         {
-            token outputs:surface.connect = </World/Materials/OpenWater/PreviewSurface.outputs:surface>
+            token outputs:surface.connect = </World/Materials/ArcticAlbedo/PreviewSurface.outputs:surface>
 
-            def Shader "PreviewSurface"
+            def Shader "StReader"
             {
-                uniform token info:id = "UsdPreviewSurface"
-                color3f inputs:diffuseColor = (0.015, 0.055, 0.11)
-                float inputs:roughness = 0.55
-                float inputs:specular = 0.02
-                token outputs:surface
+                uniform token info:id = "UsdPrimvarReader_float2"
+                string inputs:varname = "st"
+                float2 outputs:result
             }
-        }
 
-        def Material "Floe"
-        {
-            token outputs:surface.connect = </World/Materials/Floe/PreviewSurface.outputs:surface>
-
-            def Shader "PreviewSurface"
+            def Shader "AlbedoTex"
             {
-                uniform token info:id = "UsdPreviewSurface"
-                color3f inputs:diffuseColor = (0.7, 0.76, 0.8)
-                float inputs:roughness = 0.9
-                float inputs:specular = 0.02
-                token outputs:surface
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../../data/processed/arctic_albedo_texture.png@
+                float2 inputs:st.connect = </World/Materials/ArcticAlbedo/StReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                color3f outputs:rgb
             }
-        }
-
-        def Material "SeaIceSheet"
-        {
-            token outputs:surface.connect = </World/Materials/SeaIceSheet/PreviewSurface.outputs:surface>
 
             def Shader "PreviewSurface"
             {
                 uniform token info:id = "UsdPreviewSurface"
-                color3f inputs:diffuseColor = (0.78, 0.82, 0.85)
-                float inputs:roughness = 0.9
-                float inputs:specular = 0.02
-                token outputs:surface
-            }
-        }
-
-        def Material "SnowBand"
-        {
-            token outputs:surface.connect = </World/Materials/SnowBand/PreviewSurface.outputs:surface>
-
-            def Shader "PreviewSurface"
-            {
-                uniform token info:id = "UsdPreviewSurface"
-                color3f inputs:diffuseColor = (0.9, 0.92, 0.95)
-                float inputs:roughness = 0.9
-                float inputs:specular = 0.02
-                token outputs:surface
-            }
-        }
-
-        def Material "MeltPond"
-        {
-            token outputs:surface.connect = </World/Materials/MeltPond/PreviewSurface.outputs:surface>
-
-            def Shader "PreviewSurface"
-            {
-                uniform token info:id = "UsdPreviewSurface"
-                color3f inputs:diffuseColor = (0.12, 0.34, 0.44)
-                float inputs:roughness = 0.35
+                color3f inputs:diffuseColor.connect = </World/Materials/ArcticAlbedo/AlbedoTex.outputs:rgb>
+                float inputs:roughness = 0.7
                 float inputs:specular = 0.02
                 token outputs:surface
             }
         }
     }
 
-    def Xform "Surface"
+    def "Surface"
     {
-        def Mesh "OpenWater" (
+        def Mesh "ArcticSurface" (
             prepend apiSchemas = ["MaterialBindingAPI"]
         )
         {
             float3[] extent = [(-6400, -6400, 0), (12800, 12800, 0)]
             int[] faceVertexCounts = [4]
             int[] faceVertexIndices = [0, 1, 2, 3]
-            rel material:binding = </World/Materials/OpenWater>
+            rel material:binding = </World/Materials/ArcticAlbedo>
             point3f[] points = [(-6400, -6400, 0), (12800, -6400, 0), (12800, 12800, 0), (-6400, 12800, 0)]
-        }
-
-        def Mesh "SeaIceSheet" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-6400, 9100, 2), (12800, 12800, 2)]
-            int[] faceVertexCounts = [8]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7]
-            rel material:binding = </World/Materials/SeaIceSheet>
-            point3f[] points = [(-6400, 10500, 2), (-2500, 9300, 2), (1500, 10800, 2), (5200, 9100, 2), (8600, 10400, 2), (12800, 9600, 2), (12800, 12800, 2), (-6400, 12800, 2)]
-        }
-
-        def Mesh "SnowBand" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-6400, 11300, 3), (12800, 12800, 3)]
-            int[] faceVertexCounts = [6]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5]
-            rel material:binding = </World/Materials/SnowBand>
-            point3f[] points = [(-6400, 11800, 3), (2000, 11300, 3), (7000, 12000, 3), (12800, 11400, 3), (12800, 12800, 3), (-6400, 12800, 3)]
-        }
-
-        def Mesh "Floe_00" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-4531.867, 6334.8735, 2), (-2550, 7858.179, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(-2550, 7200, 2), (-2658.814, 7764.671, 2), (-3360.7498, 7831.7812, 2), (-3975, 7858.179, 2), (-4531.867, 7500.455, 2), (-4253.549, 6980.5845, 2), (-3975, 6541.821, 2), (-3309.3186, 6334.8735, 2), (-2885.7017, 6787.634, 2)]
-        }
-
-        def Mesh "Floe_01" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-163.37102, 6241.5693, 2), (1306.0254, 7358.4307, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(1306.0254, 6800, 2), (1040.785, 7163.018, 2), (602.11035, 7263.2773, 2), (96.98733, 7358.4307, 2), (-163.37102, 6993.1577, 2), (-52.567425, 6639.1055, 2), (96.98733, 6241.5693, 2), (622.586, 6243.824, 2), (950.4571, 6497.617, 2)]
-        }
-
-        def Mesh "Floe_02" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(2737.6877, 6772.8506, 2), (5138.2246, 8627.149, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(5138.2246, 7700, 2), (4551.709, 8204.606, 2), (3996.3074, 8590.651, 2), (3130.8877, 8627.149, 2), (2877.8926, 7968.4956, 2), (2737.6877, 7390.68, 2), (3130.8877, 6772.8506, 2), (3970.3987, 6926.8975, 2), (4666.005, 7118.6685, 2)]
-        }
-
-        def Mesh "Floe_03" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(6720.324, 5917.4565, 2), (8440.829, 7237.528, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(8440.829, 6500, 2), (8123.2383, 6851.2393, 2), (7762.5576, 7237.528, 2), (7179.5854, 7082.5435, 2), (6958.1533, 6686.8906, 2), (6720.324, 6243.8594, 2), (7179.5854, 5917.4565, 2), (7718.6084, 5961.87, 2), (8317.118, 6018.613, 2)]
-        }
-
-        def Mesh "Floe_04" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(10118.344, 7428.036, 2), (11355.691, 8471.506, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(11335.541, 7900, 2), (11258.903, 8208.053, 2), (10925.965, 8471.506, 2), (10532.2295, 8271.033, 2), (10237.071, 8063.911, 2), (10118.344, 7701.518, 2), (10532.2295, 7528.9663, 2), (10904.025, 7428.036, 2), (11355.691, 7526.976, 2)]
-        }
-
-        def Mesh "Floe_05" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-1152.4183, 3936.848, 2), (-149.66446, 4826.9214, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(-169.75531, 4400, 2), (-149.66446, 4702.3013, 2), (-505.90283, 4826.9214, 2), (-815.1223, 4698.082, 2), (-1152.4183, 4560.851, 2), (-1109.2043, 4251.732, 2), (-815.1223, 4101.918, 2), (-497.9172, 3936.848, 2), (-184.89276, 4121.347, 2)]
-        }
-
-        def Mesh "Floe_06" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(5592.1724, 3674.2332, 2), (6536.8643, 4417.279, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(6536.8643, 4100, 2), (6513.985, 4377.8994, 2), (6169.931, 4417.279, 2), (5881.568, 4402.6685, 2), (5592.1724, 4247.867, 2), (5721.57, 3989.81, 2), (5881.568, 3797.3315, 2), (6193.843, 3674.2332, 2), (6408.499, 3892.911, 2)]
-        }
-
-        def Mesh "Floe_07" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(11303.806, 5016.304, 2), (12782.78, 6142.326, 2)]
-            int[] faceVertexCounts = [9]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            rel material:binding = </World/Materials/Floe>
-            point3f[] points = [(12782.78, 5600, 2), (12567.543, 5980.9805, 2), (12100.081, 6054.071, 2), (11608.609, 6142.326, 2), (11303.806, 5802.7153, 2), (11458.413, 5442.3027, 2), (11608.609, 5057.674, 2), (12128.651, 5016.304, 2), (12441.506, 5303.6265, 2)]
-        }
-
-        def Mesh "MeltPond_00" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-661.787, 11079.026, 4), (610.36804, 11768.528, 4)]
-            int[] faceVertexCounts = [28]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
-            rel material:binding = </World/Materials/MeltPond>
-            point3f[] points = [(586.2707, 11400, 4), (547.1236, 11468.481, 4), (506.14304, 11533.667, 4), (459.5324, 11600.965, 4), (391.4377, 11669.175, 4), (288.29828, 11728.296, 4), (151.69312, 11764.464, 4), (4.1149508e-14, 11768.528, 4), (-142.33394, 11741.978, 4), (-259.7629, 11695.802, 4), (-353.54318, 11643.116, 4), (-436.64883, 11590.957, 4), (-519.6674, 11537.238, 4), (-598.54254, 11474.917, 4), (-653.7293, 11400, 4), (-661.787, 11317.167, 4), (-611.05835, 11238.626, 4), (-509.93863, 11176.991, 4), (-381.68964, 11137.529, 4), (-249.71756, 11115.638, 4), (-124.23285, 11101.513, 4), (-1.04335784e-13, 11088.528, 4), (133.59203, 11079.026, 4), (278.25293, 11083.143, 4), (419.58417, 11111.471, 4), (532.8222, 11166.984, 4), (597.53394, 11242.197, 4), (610.36804, 11323.603, 4)]
-        }
-
-        def Mesh "MeltPond_01" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(3298.0007, 10554.498, 4), (4938.001, 11445.212, 4)]
-            int[] faceVertexCounts = [28]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
-            rel material:binding = </World/Materials/MeltPond>
-            point3f[] points = [(4938.001, 11000, 4), (4937.159, 11088.2295, 4), (4922.674, 11182.499, 4), (4869.1733, 11279.84, 4), (4757.4224, 11366.541, 4), (4590.4355, 11425.148, 4), (4393.781, 11445.212, 4), (4200, 11429.81, 4), (4028.9724, 11392.937, 4), (3878.9365, 11349.608, 4), (3734.703, 11305.963, 4), (3586.4587, 11256.575, 4), (3444.4473, 11190.802, 4), (3337.8364, 11103.191, 4), (3298.0007, 11000, 4), (3338.2776, 10896.861, 4), (3445.0847, 10809.359, 4), (3586.97, 10743.639, 4), (3734.8992, 10694.166, 4), (3878.8665, 10650.315, 4), (4028.8462, 10606.773, 4), (4200, 10569.81, 4), (4393.9067, 10554.498, 4), (4590.506, 10574.775, 4), (4757.226, 10633.588, 4), (4868.662, 10720.374, 4), (4922.036, 10817.662, 4), (4936.7183, 10911.823, 4)]
-        }
-
-        def Mesh "MeltPond_02" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(7745.0967, 11274.685, 4), (8812.368, 11882.967, 4)]
-            int[] faceVertexCounts = [28]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
-            rel material:binding = </World/Materials/MeltPond>
-            point3f[] points = [(8792.099, 11600, 4), (8812.368, 11667.468, 4), (8801.453, 11739.319, 4), (8746.927, 11805.622, 4), (8651.759, 11854.476, 4), (8533.186, 11879.3545, 4), (8411.948, 11882.967, 4), (8300, 11874.685, 4), (8195.794, 11863.397, 4), (8090.4194, 11851.076, 4), (7979.5884, 11831.798, 4), (7872.003, 11796.913, 4), (7787.359, 11742.428, 4), (7745.0967, 11673.069, 4), (7752.098, 11600, 4), (7798.443, 11533.955, 4), (7864.446, 11478.989, 4), (7933.8223, 11431.528, 4), (8003.3296, 11385.377, 4), (8081.9463, 11338.773, 4), (8180.5264, 11298.01, 4), (8300, 11274.685, 4), (8427.216, 11278.44, 4), (8541.659, 11310.494, 4), (8628.018, 11362.699, 4), (8685.107, 11422.819, 4), (8724.366, 11482.098, 4), (8759.021, 11539.557, 4)]
-        }
-
-        def Mesh "MeltPond_03" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(-3529.1665, 10916.406, 4), (-2643.291, 11442.138, 4)]
-            int[] faceVertexCounts = [28]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
-            rel material:binding = </World/Materials/MeltPond>
-            point3f[] points = [(-2651.9329, 11200, 4), (-2643.291, 11263.029, 4), (-2674.6865, 11323.845, 4), (-2742.4553, 11372.405, 4), (-2831.4927, 11403.585, 4), (-2924.8398, 11419.926, 4), (-3013.611, 11428.857, 4), (-3100, 11436.406, 4), (-3191.402, 11442.138, 4), (-3290.4453, 11439.117, 4), (-3388.8057, 11418.975, 4), (-3469.8025, 11378.316, 4), (-3518.069, 11321.735, 4), (-3529.1665, 11259.229, 4), (-3511.9329, 11200, 4), (-3481.729, 11147.318, 4), (-3449.5198, 11098.226, 4), (-3414.8303, 11048.191, 4), (-3367.6938, 10997.032, 4), (-3297.9797, 10951.422, 4), (-3204.9792, 10921.895, 4), (-3100, 10916.406, 4), (-3000.0342, 10935.176, 4), (-2917.3052, 10970.613, 4), (-2852.6042, 11012.423, 4), (-2797.4272, 11054.102, 4), (-2743.2358, 11096.116, 4), (-2690.7285, 11143.518, 4)]
-        }
-
-        def Mesh "MeltPond_04" (
-            prepend apiSchemas = ["MaterialBindingAPI"]
-        )
-        {
-            float3[] extent = [(10491.67, 10454.964, 4), (11615.474, 11138.157, 4)]
-            int[] faceVertexCounts = [28]
-            int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
-            rel material:binding = </World/Materials/MeltPond>
-            point3f[] points = [(11615.474, 10800, 4), (11592.898, 10879.745, 4), (11522.391, 10948.246, 4), (11424.401, 10999.443, 4), (11320.063, 11036.508, 4), (11218.77, 11067.701, 4), (11115.583, 11098.416, 4), (11000, 11125.487, 4), (10869.024, 11138.157, 4), (10734.299, 11125.129, 4), (10617.612, 11082.5625, 4), (10537.963, 11017.13, 4), (10499.854, 10941.935, 4), (10491.67, 10868.371, 4), (10495.474, 10800, 4), (10500.979, 10732.881, 4), (10513.305, 10661.883, 4), (10548.75, 10587.939, 4), (10621.755, 10520.499, 4), (10732.82, 10473.062, 4), (10866.359, 10454.964, 4), (11000, 10465.487, 4), (11118.247, 10494.705, 4), (11220.248, 10530.49, 4), (11315.921, 10566.554, 4), (11413.613, 10605.627, 4), (11508.938, 10655.571, 4), (11583.589, 10721.507, 4)]
+            texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)] (
+                interpolation = "varying"
+            )
         }
     }
 
