@@ -78,7 +78,7 @@ def Xform "World" (
             color3f inputs:color = (1, 0.985, 0.95)
             float inputs:intensity = 2500
             float xformOp:rotateX = 30
-            float xformOp:rotateZ = 40
+            float xformOp:rotateZ = 140
             uniform token[] xformOpOrder = ["xformOp:rotateZ", "xformOp:rotateX"]
         }
     }

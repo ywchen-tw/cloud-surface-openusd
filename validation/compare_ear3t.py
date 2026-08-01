@@ -37,7 +37,8 @@ import numpy as np
 # Keep in sync with the USD side.
 MIN_BETA = 5e-4          # 1/m — same fringe cutoff as src/grid_to_vdb.py
 SZA = 30.0               # deg — same as src/author_cloud_usd.py SUN_SZA_DEG
-SAA = 40.0               # deg — VERIFY azimuth convention vs USD (az from +x CCW)
+SAA = 40.0               # deg, er3t compass convention (0=north/+y, 90=east/+x);
+                         # USD sun authored to the SAME convention (author_cloud_usd.py)
 WAVELENGTH = 650.0       # nm
 SURFACE_ALBEDO = 0.05    # Lambertian; USD render must use --flat-albedo 0.05
 PHOTONS = 1e8

@@ -34,7 +34,10 @@ VDB_REL = "../week7/vdbs/cloud_density.vdb"
 META_JSON = os.path.join(ROOT, "data", "processed", "cloud_ext_64x64x32.json")
 
 SUN_SZA_DEG = 30.0  # solar zenith angle; keep in sync with the EaR3T run
-SUN_AZ_DEG = 40.0   # solar azimuth (deg from +x, CCW)
+# Solar azimuth in the EaR3T/MCARaTS compass convention: 0 = north (+y),
+# 90 = east (+x), clockwise positive (er3t mcarats.py cal_mca_azimuth).
+# compare_ear3t.py passes this same value as solar_azimuth_angle.
+SUN_SAA_DEG = 40.0
 
 
 def load_domain():
@@ -98,9 +101,12 @@ def create_sun(stage):
     sun.CreateAngleAttr(0.53)
     sun.CreateColorAttr(Gf.Vec3f(1.0, 0.985, 0.95))
     # Identity aims the light straight down (-Z); tilt by the solar zenith
-    # angle, then set the azimuth about Z.
+    # angle, then orient the azimuth about Z. With ops [Rz, Rx] the light's
+    # horizontal travel direction is (-sin(rz), cos(rz)); matching the
+    # compass-SAA sun position (sin(saa), cos(saa)) requires rz = 180 - saa
+    # (verified against the EaR3T shadow displacement, 2026-08-01).
     xf = UsdGeom.Xformable(sun)
-    xf.AddRotateZOp().Set(SUN_AZ_DEG)
+    xf.AddRotateZOp().Set(180.0 - SUN_SAA_DEG)
     xf.AddRotateXOp().Set(SUN_SZA_DEG)
 
 
@@ -166,7 +172,7 @@ def main():
     )
     stage.GetRootLayer().Save()
     print("wrote", OUT_USD)
-    print("domain %.0f x %.0f x %.0f m, sun SZA %.0f az %.0f" % (size_x, size_y, size_z, SUN_SZA_DEG, SUN_AZ_DEG))
+    print("domain %.0f x %.0f x %.0f m, sun SZA %.0f az %.0f" % (size_x, size_y, size_z, SUN_SZA_DEG, SUN_SAA_DEG))
 
 
 if __name__ == "__main__":
