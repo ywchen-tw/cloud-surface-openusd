@@ -63,7 +63,10 @@ echo "Out:   $OUT_DIR"
     --frame-start "$FRAME_START" --frame-end "$FRAME_END" \
     --samples "$SAMPLES" --res 1280 720 \
     --camera MainCamera --anisotropy 0.85 \
-    --skip-existing
+    $( [ "$FRAME_END" -gt "$FRAME_START" ] && echo --skip-existing )
+# --skip-existing only for multi-frame runs: it resumes after preemption, but
+# on a single-frame rerun it silently skips the stale frame from a previous
+# submission (this bit us on 2026-08-01, jobs 27294045/27294083).
 
 # Assemble a preview mp4 if ffmpeg is available (module or system).
 module load ffmpeg 2>/dev/null || true
