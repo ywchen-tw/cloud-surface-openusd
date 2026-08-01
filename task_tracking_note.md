@@ -7,9 +7,13 @@
 ## Where things stand (2026-08-01 end of day)
 
 Phase 8 validation loop is CLOSED: hero render, nadir sensor render, EaR3T
-run, and quantitative comparison all work. Current headline: **r = 0.802,
-rel RMSE 36.8%** (see Next steps item 4). Remaining work is physics-gap
-closing (item 5) and deliverables (item 6).
+run, and quantitative comparison all work. Current headline: **r = 0.943,
+rel RMSE 22.2%** after aligning the sun azimuth to er3t's compass convention
+(0=north, 90=east; USD Rz = 180-SAA). Remaining gap terms, largest first:
+(a) peak radiance underestimate in the thickest cores (likely finite
+volume_bounces=16 vs tau~50 clouds — try 64), (b) missing Rayleigh skylight
+in shadows (sun-only Cycles scene), (c) boundary conditions (MCARaTS is
+horizontally cyclic, the USD domain is open — edge cells disagree).
 
 ## Done so far (do NOT redo)
 
@@ -67,8 +71,8 @@ closing (item 5) and deliverables (item 6).
    `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 4096 NadirCamera 128 128 "--exr --world-strength 0 --flat-albedo 0.05"`
    -> writes frame_0001.exr + frame_0001.npy (radiance array).
 4. ~~First USD-vs-EaR3T comparison~~ DONE 2026-08-01, current headline:
-   **r = 0.802, rel RMSE 36.8%** (CPU-rendered USD frame vs 1e9-photon EaR3T
-   on the identical field). Figure + metrics at
+   **r = 0.943, rel RMSE 22.2%** (CPU-rendered USD frame, azimuth-aligned,
+   vs 1e9-photon EaR3T on the identical field). Figure + metrics at
    `$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t_*`.
    KEY FINDING: OptiX GPU renders have a zero-radiance leaf-box artifact on
    this fragmented volume (6% of nadir pixels black in open sun) — ALWAYS
