@@ -141,7 +141,10 @@ def load_ear3t(h5_path):
     with h5py.File(h5_path, "r") as f:
         rad = f["mean/rad"][...]
         std = f["mean/rad_std"][...] if "mean/rad_std" in f else None
-    return np.asarray(rad, dtype=np.float64), std
+    # mean/rad is (nx, ny); transpose to image convention rows=y, cols=x
+    # (verified against the tile tau map: un-transposed panels showed the
+    # cluster pattern mirrored across the diagonal).
+    return np.asarray(rad, dtype=np.float64).T, std
 
 
 def compare(usd, rt, out_prefix):
@@ -217,6 +220,12 @@ def main():
     # origin lower-left. VERIFY orientation by eye on the first figure and
     # adjust the flip/transpose here if the panels are mirrored.
     usd = usd[::-1]
+    # MCARaTS radiance is on the native cloud grid (one pixel per column);
+    # block-average the render down to it (sensor pixel = LES column).
+    if usd.shape != rt.shape and usd.shape[0] % rt.shape[0] == 0 \
+            and usd.shape[1] % rt.shape[1] == 0:
+        fy, fx = usd.shape[0] // rt.shape[0], usd.shape[1] // rt.shape[1]
+        usd = usd.reshape(rt.shape[0], fy, rt.shape[1], fx).mean(axis=(1, 3))
     if usd.shape != rt.shape and usd.T.shape == rt.shape:
         usd = usd.T
     compare(usd, rt, args.out_prefix)
