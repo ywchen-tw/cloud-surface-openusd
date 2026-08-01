@@ -32,6 +32,10 @@ def parse_args():
     p.add_argument("--res", type=int, nargs=2, default=[1280, 720], metavar=("X", "Y"))
     p.add_argument("--camera", default=None, help="prefer camera object whose name contains this")
     p.add_argument("--anisotropy", type=float, default=0.85, help="HG asymmetry g (plan.md: 0.85)")
+    p.add_argument("--ssa", type=float, default=0.999999,
+                   help="single-scattering albedo -> Principled Volume color (liquid cloud ~1)")
+    p.add_argument("--volume-bounces", type=int, default=16,
+                   help="Cycles volume scattering bounces; 0 = single scattering = dark clouds")
     p.add_argument("--density-scale", type=float, default=1.0)
     p.add_argument("--skip-existing", action="store_true",
                    help="skip frames whose PNG already exists (resume after preemption)")
@@ -59,7 +63,7 @@ def volume_objects():
     return [o for o in bpy.data.objects if o.type == "VOLUME"]
 
 
-def assign_cloud_material(obj, anisotropy, density_scale):
+def assign_cloud_material(obj, anisotropy, density_scale, ssa):
     mat = bpy.data.materials.new("CloudVolumeCycles")
     mat.use_nodes = True
     nt = mat.node_tree
@@ -69,6 +73,9 @@ def assign_cloud_material(obj, anisotropy, density_scale):
     pv.inputs["Density Attribute"].default_value = "density"
     pv.inputs["Density"].default_value = density_scale
     pv.inputs["Anisotropy"].default_value = anisotropy
+    # Color = single-scattering albedo (the node's default 0.5 renders like
+    # soot; liquid cloud at VIS wavelengths is ~1 -> white).
+    pv.inputs["Color"].default_value = (ssa, ssa, ssa, 1.0)
     nt.links.new(pv.outputs["Volume"], out.inputs["Volume"])
     obj.data.materials.clear()
     obj.data.materials.append(mat)
@@ -148,12 +155,15 @@ def main():
     if not vols:
         print("[curc] WARNING: no volume object in scene — rendering surfaces only")
     for v in vols:
-        assign_cloud_material(v, args.anisotropy, args.density_scale)
+        assign_cloud_material(v, args.anisotropy, args.density_scale, args.ssa)
 
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     dev = enable_gpu(scene)
     scene.cycles.samples = args.samples
+    # Multiple scattering is what makes clouds white; Cycles defaults to 0.
+    scene.cycles.volume_bounces = args.volume_bounces
+    scene.cycles.max_bounces = max(scene.cycles.max_bounces, args.volume_bounces)
     scene.render.resolution_x, scene.render.resolution_y = args.res
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = args.out
