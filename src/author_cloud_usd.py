@@ -130,9 +130,11 @@ def create_cameras(stage, size_x, size_y, size_z):
     # Orthographic nadir sensor covering the full tile: the EaR3T geometry.
     nadir = UsdGeom.Camera.Define(stage, "/World/Camera/NadirCamera")
     nadir.CreateProjectionAttr(UsdGeom.Tokens.orthographic)
-    # USD apertures are in tenths of a scene unit -> 10x the size in meters.
-    nadir.CreateHorizontalApertureAttr(size_x * 10.0)
-    nadir.CreateVerticalApertureAttr(size_y * 10.0)
+    # Blender's USD importer maps the raw aperture value to Cycles ortho
+    # scale in scene units (meters here), so author the tile width directly
+    # (verified: value*10 rendered a 64 km sensor with the tile at ~10%).
+    nadir.CreateHorizontalApertureAttr(size_x)
+    nadir.CreateVerticalApertureAttr(size_y)
     nadir.CreateClippingRangeAttr(Gf.Vec2f(100.0, 30000.0))
     UsdGeom.Xformable(nadir).AddTranslateOp().Set(
         Gf.Vec3d(size_x / 2, size_y / 2, size_z + 6000.0)

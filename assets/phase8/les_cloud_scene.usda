@@ -96,9 +96,9 @@ def Xform "World" (
         def Camera "NadirCamera"
         {
             float2 clippingRange = (100, 30000)
-            float horizontalAperture = 64000
+            float horizontalAperture = 6400
             token projection = "orthographic"
-            float verticalAperture = 64000
+            float verticalAperture = 6400
             double3 xformOp:translate = (3200, 3200, 8560)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
