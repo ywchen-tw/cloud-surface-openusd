@@ -73,6 +73,6 @@ renders/*
 *.tmp
 *.log
 
-# Slurm job logs
-sbatch-output_*.txt
+# Slurm job logs and other text output
+*.txt
 slurm-*.out
