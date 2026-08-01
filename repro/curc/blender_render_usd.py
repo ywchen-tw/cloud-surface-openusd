@@ -39,6 +39,11 @@ def parse_args():
     p.add_argument("--density-scale", type=float, default=1.0)
     p.add_argument("--skip-existing", action="store_true",
                    help="skip frames whose PNG already exists (resume after preemption)")
+    p.add_argument("--exr", action="store_true",
+                   help="write scene-linear OpenEXR (+ .npy radiance dump) instead of "
+                        "tone-mapped PNG — required for quantitative validation")
+    p.add_argument("--world-strength", type=float, default=0.4,
+                   help="background/sky strength; use 0 for sun-only validation renders")
     return p.parse_args(argv)
 
 
@@ -123,7 +128,7 @@ def ensure_camera(scene, name_hint):
     return "AutoCam (generated oblique view)"
 
 
-def ensure_light_and_world(scene):
+def ensure_light_and_world(scene, world_strength=0.4):
     if not any(o.type == "LIGHT" for o in bpy.data.objects):
         sun_data = bpy.data.lights.new("AutoSun", type="SUN")
         sun_data.energy = 3.0
@@ -137,7 +142,7 @@ def ensure_light_and_world(scene):
     bg = scene.world.node_tree.nodes.get("Background")
     if bg:
         bg.inputs[0].default_value = (0.35, 0.5, 0.72, 1.0)  # hazy sky blue
-        bg.inputs[1].default_value = 0.4
+        bg.inputs[1].default_value = world_strength
 
 
 def main():
@@ -165,18 +170,38 @@ def main():
     scene.cycles.volume_bounces = args.volume_bounces
     scene.cycles.max_bounces = max(scene.cycles.max_bounces, args.volume_bounces)
     scene.render.resolution_x, scene.render.resolution_y = args.res
-    scene.render.image_settings.file_format = "PNG"
+    if args.exr:
+        scene.render.image_settings.file_format = "OPEN_EXR"
+        scene.render.image_settings.color_depth = "32"
+        scene.view_settings.view_transform = "Standard"
+    else:
+        scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = args.out
     scene.frame_start, scene.frame_end = args.frame_start, args.frame_end
     scene.render.use_overwrite = not args.skip_existing
     scene.render.use_placeholder = args.skip_existing
 
     cam_info = ensure_camera(scene, args.camera)
-    ensure_light_and_world(scene)
+    ensure_light_and_world(scene, args.world_strength)
 
+    ext = "exr" if args.exr else "png"
     print(f"[curc] device={dev} samples={args.samples} res={args.res} camera={cam_info}")
-    print(f"[curc] rendering frames {args.frame_start}..{args.frame_end} -> {args.out}####.png")
+    print(f"[curc] rendering frames {args.frame_start}..{args.frame_end} -> {args.out}####.{ext}")
     bpy.ops.render.render(animation=True)
+
+    if args.exr:
+        # Dump each frame as float32 npy (mean of RGB — the scene is
+        # monochromatic gray) so validation scripts need no EXR reader.
+        import numpy as np
+        for f in range(args.frame_start, args.frame_end + 1):
+            path = f"{args.out}{f:04d}.exr"
+            img = bpy.data.images.load(path)
+            w, h = img.size
+            px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+            rad = px[..., :3].mean(axis=2)[::-1]  # flip to row 0 = top
+            np.save(path.replace(".exr", ".npy"), rad)
+            bpy.data.images.remove(img)
+            print(f"[curc] wrote {path.replace('.exr', '.npy')} (min {rad.min():.4g} max {rad.max():.4g})")
     print("[curc] render complete")
 
 
