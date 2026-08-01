@@ -4,29 +4,12 @@
 > Written 2026-08-01. Full environment details: `repro/curc/README.md`.
 > Project plan and checkboxes: `plan.md` (Phase 8 section).
 
-## Where things stand
+## Where things stand (2026-08-01 end of day)
 
-**IN FLIGHT: job `30696289`** (`usd-cloud-cycles`, partition `al40`, was
-PENDING/Resources at write time) — the **first render of the real LES cloud**:
-
-```bash
-sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 256
-```
-
-### How to check it
-
-```bash
-squeue -u yuch8913                                   # queue state
-cat sbatch-output_usd-cloud-cycles_30696289.txt      # job log (repo root)
-ls -lh /scratch/alpine/yuch8913/cloud_sfc_openusd_data/renders/les_cloud_scene_cycles/
-```
-
-Success looks like: log contains `[curc] device=OPTIX`, `camera=MainCamera
-(imported)`, `[curc] render complete`, **no** `unsupported VDB file format`
-warning, and `frame_0001.png` shows shallow-cumulus clouds over dark ocean
-(oblique view of a 6.4 km tile). If the job sits pending too long: resubmit
-with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
-`sbatch -p ... repro/curc/render_week7_cycles.sbatch ...`).
+Phase 8 validation loop is CLOSED: hero render, nadir sensor render, EaR3T
+run, and quantitative comparison all work. Current headline: **r = 0.802,
+rel RMSE 36.8%** (see Next steps item 4). Remaining work is physics-gap
+closing (item 5) and deliverables (item 6).
 
 ## Done so far (do NOT redo)
 
@@ -103,12 +86,6 @@ with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
      sun-azimuth convention mismatch (USD az-from-+x vs MCARaTS saa).
    - More photons (1e8 -> 1e9) + higher render samples to shrink MC noise.
 6. Then: 20-frame fly-through + one-pager leading with the validation figure.
-3. **`validation/compare_ear3t.py`** (not started): run EaR3T 3D-RT on
-   `data/processed/cloud_field_64x64x32.npz` (`ext` + `ssa` + `asymmetry_g`
-   keys) in the `er3t` env at the SAME SZA 30°/az 40° geometry, compare with
-   the nadir render, compute RMSE / % agreement, produce the side-by-side
-   headline figure. This is the whole point of the project (plan.md "moat").
-4. Then: 20-frame fly-through of the phase8 scene for the demo reel, one-pager.
 
 ## Conventions
 
