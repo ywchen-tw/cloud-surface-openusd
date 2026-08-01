@@ -56,7 +56,7 @@ def load_field():
     return ext, dx_m, dz_m, g, ssa
 
 
-def run_ear3t(out_h5, ncpu=8, overwrite=False):
+def run_ear3t(out_h5, ncpu=8, photons=PHOTONS, overwrite=False):
     """Run EaR3T/MCARaTS 3D radiance on the npz field.
 
     Scaffolded from sim-rad-7SEAS_alpine_650.py (run_rad_sim_3d). Uses HG
@@ -124,7 +124,7 @@ def run_ear3t(out_h5, ncpu=8, overwrite=False):
         sensor_altitude=705000.0,
         fdir=f"{fdir}/rad_3d",
         Nrun=3,
-        photons=PHOTONS,
+        photons=photons,
         weights=abs0.coef["weight"]["data"],
         solver="3d",
         Ncpu=ncpu,
@@ -204,6 +204,8 @@ def main():
     p.add_argument("--run-ear3t", action="store_true",
                    help="run EaR3T/MCARaTS now (er3t env, CPU-heavy)")
     p.add_argument("--ncpu", type=int, default=8)
+    p.add_argument("--photons", type=float, default=PHOTONS,
+                   help="MCARaTS photon count (default 1e8; 1e9 for the polished run)")
     p.add_argument("--out-prefix", default=os.path.join(
         os.environ.get("OPENUSD_CLD_DATAROOT", ROOT), "renders", "validation", "usd_vs_ear3t"))
     args = p.parse_args()
@@ -212,7 +214,7 @@ def main():
     h5 = args.ear3t_h5
     if args.run_ear3t or h5 is None:
         h5 = run_ear3t(os.path.join(os.path.dirname(args.out_prefix), "ear3t_rad_3d.h5"),
-                       ncpu=args.ncpu)
+                       ncpu=args.ncpu, photons=args.photons)
 
     usd = np.load(args.usd_npy).astype(np.float64)
     rt, _ = load_ear3t(h5)

@@ -16,7 +16,7 @@
 # CPU-only. Module set mirrors the working er3t job (arcsix curc_shell_test.sh).
 #
 # Usage:
-#   sbatch repro/curc/compare_ear3t.sbatch [usd_npy] [out_prefix]
+#   sbatch repro/curc/compare_ear3t.sbatch [usd_npy] [out_prefix] [photons]
 
 set -euo pipefail
 
@@ -29,6 +29,7 @@ conda activate er3t
 
 USD_NPY="${1:-$OPENUSD_CLD_DATAROOT/renders/les_cloud_scene_cycles_NadirCamera/frame_0001.npy}"
 OUT_PREFIX="${2:-$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t}"
+PHOTONS="${3:-1e8}"
 
 if [ ! -f "$USD_NPY" ]; then
     echo "ERROR: USD radiance npy not found: $USD_NPY" >&2
@@ -42,6 +43,7 @@ echo "Out     : $OUT_PREFIX  (ncpu ${SLURM_NTASKS:-16})"
 python validation/compare_ear3t.py \
     --run-ear3t \
     --ncpu "${SLURM_NTASKS:-16}" \
+    --photons "$PHOTONS" \
     --usd-npy "$USD_NPY" \
     --out-prefix "$OUT_PREFIX"
 
