@@ -7,13 +7,12 @@
 ## Where things stand (2026-08-01 end of day)
 
 Phase 8 validation loop is CLOSED: hero render, nadir sensor render, EaR3T
-run, and quantitative comparison all work. Current headline: **r = 0.943,
-rel RMSE 22.2%** after aligning the sun azimuth to er3t's compass convention
-(0=north, 90=east; USD Rz = 180-SAA). Remaining gap terms, largest first:
-(a) peak radiance underestimate in the thickest cores (likely finite
-volume_bounces=16 vs tau~50 clouds — try 64), (b) missing Rayleigh skylight
-in shadows (sun-only Cycles scene), (c) boundary conditions (MCARaTS is
-horizontally cyclic, the USD domain is open — edge cells disagree).
+run, and quantitative comparison all work. FINAL headline: **r = 0.988, rel RMSE 13.9%**
+(periodic 3x3 scene + 64 volume bounces + azimuth-aligned CPU render vs
+1e9-photon EaR3T). Improvement ladder: 0.756 (first try) -> 0.802 (CPU,
+no OptiX artifact) -> 0.943 (azimuth convention) -> 0.988 (cyclic-BC
+tiling + bounces). Remaining ~14%: Rayleigh-skylight deficit in shadows
+(sun-only Cycles scene) + MC/render noise — postmortem material.
 
 ## Done so far (do NOT redo)
 
