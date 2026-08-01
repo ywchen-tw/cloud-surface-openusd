@@ -30,6 +30,10 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade, UsdVol
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_USD = os.path.join(ROOT, "assets", "phase8", "les_cloud_scene.usda")
+# Periodic variant for validation: the same cloud tiled 3x3 so the center
+# tile receives wrap-around shadows/illumination like MCARaTS's cyclic
+# horizontal boundary. NadirCamera still frames only the center tile.
+OUT_USD_PERIODIC = os.path.join(ROOT, "assets", "phase8", "les_cloud_scene_periodic.usda")
 VDB_REL = "../week7/vdbs/cloud_density.vdb"
 META_JSON = os.path.join(ROOT, "data", "processed", "cloud_ext_64x64x32.json")
 
@@ -63,36 +67,42 @@ def bind(prim, material):
     api.Bind(material)
 
 
-def create_ocean(stage, size_x, size_y):
+def create_ocean(stage, size_x, size_y, periodic=False):
     # 7SEAS is a tropical marine shallow-cumulus case: dark low-albedo ocean.
+    lo_x, hi_x = (-size_x, 2 * size_x) if periodic else (0.0, size_x)
+    lo_y, hi_y = (-size_y, 2 * size_y) if periodic else (0.0, size_y)
     mesh = UsdGeom.Mesh.Define(stage, "/World/Surface/Ocean")
     mesh.CreatePointsAttr(
-        [Gf.Vec3f(0, 0, 0), Gf.Vec3f(size_x, 0, 0), Gf.Vec3f(size_x, size_y, 0), Gf.Vec3f(0, size_y, 0)]
+        [Gf.Vec3f(lo_x, lo_y, 0), Gf.Vec3f(hi_x, lo_y, 0), Gf.Vec3f(hi_x, hi_y, 0), Gf.Vec3f(lo_x, hi_y, 0)]
     )
     mesh.CreateFaceVertexCountsAttr([4])
     mesh.CreateFaceVertexIndicesAttr([0, 1, 2, 3])
-    mesh.CreateExtentAttr([Gf.Vec3f(0, 0, 0), Gf.Vec3f(size_x, size_y, 0)])
+    mesh.CreateExtentAttr([Gf.Vec3f(lo_x, lo_y, 0), Gf.Vec3f(hi_x, hi_y, 0)])
     mesh.CreateDisplayColorAttr([Gf.Vec3f(0.02, 0.09, 0.17)])
     ocean_mat = make_preview_material(stage, "/World/Materials/OceanDark", (0.02, 0.09, 0.17))
     bind(mesh, ocean_mat)
 
 
-def create_cloud_volume(stage, meta, size_x, size_y, size_z):
+def create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=False):
     UsdGeom.Xform.Define(stage, "/World/CloudVolume")
-    volume = UsdVol.Volume.Define(stage, "/World/CloudVolume/Volume")
-    volume.CreateExtentAttr([Gf.Vec3f(0, 0, 0), Gf.Vec3f(size_x, size_y, size_z)])
+    shifts = [(i, j) for i in (-1, 0, 1) for j in (-1, 0, 1)] if periodic else [(0, 0)]
+    for i, j in shifts:
+        tile = UsdGeom.Xform.Define(stage, f"/World/CloudVolume/Tile_{i + 1}_{j + 1}")
+        tile.AddTranslateOp().Set(Gf.Vec3d(i * size_x, j * size_y, 0.0))
+        volume = UsdVol.Volume.Define(stage, tile.GetPath().AppendChild("Volume"))
+        volume.CreateExtentAttr([Gf.Vec3f(0, 0, 0), Gf.Vec3f(size_x, size_y, size_z)])
 
-    field = UsdVol.OpenVDBAsset.Define(stage, "/World/CloudVolume/Fields/Density")
-    field.CreateFilePathAttr(VDB_REL)
-    field.CreateFieldNameAttr(meta.get("grid_name", "density"))
-    field.CreateFieldClassAttr(UsdVol.Tokens.fogVolume)
-    volume.CreateFieldRelationship("density", field.GetPath())
+        field = UsdVol.OpenVDBAsset.Define(stage, volume.GetPath().AppendChild("Density"))
+        field.CreateFilePathAttr(VDB_REL)
+        field.CreateFieldNameAttr(meta.get("grid_name", "density"))
+        field.CreateFieldClassAttr(UsdVol.Tokens.fogVolume)
+        volume.CreateFieldRelationship("density", field.GetPath())
 
-    prim = volume.GetPrim()
-    prim.SetCustomDataByKey("units", meta.get("units", "extinction_per_meter"))
-    prim.SetCustomDataByKey("ssa", float(meta.get("ssa", 1.0)))
-    prim.SetCustomDataByKey("asymmetry_g", float(meta.get("asymmetry_g", 0.85)))
-    prim.SetCustomDataByKey("source", "7SEAS SAM-LES cloudiest 64x64 tile via src/cloud_field.py")
+        prim = volume.GetPrim()
+        prim.SetCustomDataByKey("units", meta.get("units", "extinction_per_meter"))
+        prim.SetCustomDataByKey("ssa", float(meta.get("ssa", 1.0)))
+        prim.SetCustomDataByKey("asymmetry_g", float(meta.get("asymmetry_g", 0.85)))
+        prim.SetCustomDataByKey("source", "7SEAS SAM-LES cloudiest 64x64 tile via src/cloud_field.py")
 
 
 def create_sun(stage):
@@ -147,11 +157,13 @@ def create_cameras(stage, size_x, size_y, size_z):
     )  # identity orientation looks down -Z = nadir in a Z-up stage
 
 
-def main():
+def author_stage(out_usd, periodic=False):
     meta, size_x, size_y, size_z = load_domain()
-    os.makedirs(os.path.dirname(OUT_USD), exist_ok=True)
+    os.makedirs(os.path.dirname(out_usd), exist_ok=True)
+    if os.path.exists(out_usd):
+        os.remove(out_usd)
 
-    stage = Usd.Stage.CreateNew(OUT_USD)
+    stage = Usd.Stage.CreateNew(out_usd)
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
     stage.SetMetadata("metersPerUnit", 1.0)
 
@@ -159,10 +171,15 @@ def main():
     stage.SetDefaultPrim(world.GetPrim())
     Usd.ModelAPI(world.GetPrim()).SetKind("assembly")
 
-    create_ocean(stage, size_x, size_y)
-    create_cloud_volume(stage, meta, size_x, size_y, size_z)
+    create_ocean(stage, size_x, size_y, periodic=periodic)
+    create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=periodic)
     create_sun(stage)
     create_cameras(stage, size_x, size_y, size_z)
+    return stage, world, size_x, size_y, size_z
+
+
+def main():
+    stage, world, size_x, size_y, size_z = author_stage(OUT_USD, periodic=False)
 
     world.GetPrim().SetCustomDataByKey(
         "renderNote",
@@ -172,6 +189,10 @@ def main():
     )
     stage.GetRootLayer().Save()
     print("wrote", OUT_USD)
+
+    pstage, _, _, _, _ = author_stage(OUT_USD_PERIODIC, periodic=True)
+    pstage.GetRootLayer().Save()
+    print("wrote", OUT_USD_PERIODIC, "(3x3 tiled for MCARaTS cyclic-BC match)")
     print("domain %.0f x %.0f x %.0f m, sun SZA %.0f az %.0f" % (size_x, size_y, size_z, SUN_SZA_DEG, SUN_SAA_DEG))
 
 

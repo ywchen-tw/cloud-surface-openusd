@@ -46,26 +46,29 @@ def Xform "World" (
 
     def Xform "CloudVolume"
     {
-        def Volume "Volume" (
-            customData = {
-                double asymmetry_g = 0.85
-                string source = "7SEAS SAM-LES cloudiest 64x64 tile via src/cloud_field.py"
-                double ssa = 0.999999
-                string units = "extinction_per_meter"
-            }
-        )
+        def Xform "Tile_1_1"
         {
-            float3[] extent = [(0, 0, 0), (6400, 6400, 2560)]
-            custom rel field:density = </World/CloudVolume/Fields/Density>
-        }
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
 
-        def "Fields"
-        {
-            def OpenVDBAsset "Density"
+            def Volume "Volume" (
+                customData = {
+                    double asymmetry_g = 0.85
+                    string source = "7SEAS SAM-LES cloudiest 64x64 tile via src/cloud_field.py"
+                    double ssa = 0.999999
+                    string units = "extinction_per_meter"
+                }
+            )
             {
-                token fieldClass = "fogVolume"
-                token fieldName = "density"
-                asset filePath = @../week7/vdbs/cloud_density.vdb@
+                float3[] extent = [(0, 0, 0), (6400, 6400, 2560)]
+                custom rel field:density = </World/CloudVolume/Tile_1_1/Volume/Density>
+
+                def OpenVDBAsset "Density"
+                {
+                    token fieldClass = "fogVolume"
+                    token fieldName = "density"
+                    asset filePath = @../week7/vdbs/cloud_density.vdb@
+                }
             }
         }
     }
