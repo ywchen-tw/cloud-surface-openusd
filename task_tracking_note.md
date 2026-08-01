@@ -83,9 +83,15 @@ with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
    extra driver flags):
    `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 4096 NadirCamera 128 128 "--exr --world-strength 0 --flat-albedo 0.05"`
    -> writes frame_0001.exr + frame_0001.npy (radiance array).
-4. ~~First USD-vs-EaR3T comparison~~ DONE 2026-08-01: **r = 0.756, rel RMSE
-   45%** on the identical field; panels align cluster-for-cluster. Figure +
-   metrics at `$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t_*`.
+4. ~~First USD-vs-EaR3T comparison~~ DONE 2026-08-01, current headline:
+   **r = 0.802, rel RMSE 36.8%** (CPU-rendered USD frame vs 1e9-photon EaR3T
+   on the identical field). Figure + metrics at
+   `$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t_*`.
+   KEY FINDING: OptiX GPU renders have a zero-radiance leaf-box artifact on
+   this fragmented volume (6% of nadir pixels black in open sun) — ALWAYS
+   render validation frames with the CPU route (`render_cycles_cpu*.sbatch`);
+   GPU is fine for hero/animation frames. 1e8 vs 1e9 photons changed r by
+   0.001 — EaR3T noise is not the bottleneck.
    The EaR3T h5 is cached there (`ear3t_rad_3d.h5`) — re-compare without
    re-running MC via `--ear3t-h5`. sbatch wrappers: `repro/curc/compare_ear3t*.sbatch`.
 5. **Close the physics gap** (largest first):
