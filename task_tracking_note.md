@@ -70,14 +70,14 @@ with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
 
 ## Next steps (in order)
 
-1. **Inspect job 30696289's frame** (first real-LES render — the visual half
-   of the thesis). Iterate on `src/author_cloud_usd.py` if framing/exposure
-   needs work (sun intensity 2500 was a first guess; check for blown-out or
-   too-dark ocean).
-2. **Nadir validation render**: same scene, `--camera NadirCamera` — add a
-   camera arg passthrough to the sbatch or run the blender driver directly.
-   Match resolution to the EaR3T sensor grid (plan.md suggests 128×128;
-   `--res 128 128`).
+1. ~~First real-LES render~~ DONE 2026-08-01: white multiple-scattering
+   cumulus + ocean shadows confirmed (`les_cloud_scene_cycles/frame_0001.png`).
+   Appearance fixes that made it work: Principled Volume color = SSA (~1),
+   `cycles.volume_bounces=16` (defaults rendered black smoke). Beware stale
+   frames when re-rendering with new settings — delete old PNGs first.
+2. **Nadir validation render** (sbatch now takes camera/res args 5-7):
+   `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 1024 NadirCamera 128 128`
+   (Blanca variant identical args). Output dir gets `_NadirCamera` suffix.
 3. **`validation/compare_ear3t.py`** (not started): run EaR3T 3D-RT on
    `data/processed/cloud_field_64x64x32.npz` (`ext` + `ssa` + `asymmetry_g`
    keys) in the `er3t` env at the SAME SZA 30°/az 40° geometry, compare with
@@ -86,6 +86,17 @@ with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
 4. Then: 20-frame fly-through of the phase8 scene for the demo reel, one-pager.
 
 ## Conventions
+
+- **Always give the user BOTH submission variants** — Alpine and Blanca —
+  for any render/compute job (Alpine GPU queues can have long waits):
+  ```bash
+  # Alpine (fast L40s, may queue):
+  sbatch repro/curc/render_week7_cycles.sbatch <scene> <start> <end> <samples>
+  # Blanca (preemptable, usually starts fast; slower RTX 8000):
+  module load slurm/blanca
+  sbatch repro/curc/render_week7_cycles_blanca.sbatch <scene> <start> <end> <samples>
+  module load slurm/alpine   # switch back for Alpine submissions
+  ```
 
 - Sun geometry lives in `src/author_cloud_usd.py` (`SUN_SZA_DEG = 30`,
   `SUN_AZ_DEG = 40`) — EaR3T runs MUST use the same values for the comparison

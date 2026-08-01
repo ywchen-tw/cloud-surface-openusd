@@ -24,7 +24,7 @@
 #
 # Submit from a login node with the Blanca slurm instance loaded:
 #   module load slurm/blanca
-#   sbatch repro/curc/render_week7_cycles_blanca.sbatch [usd_scene] [start] [end] [samples]
+#   sbatch repro/curc/render_week7_cycles_blanca.sbatch [usd_scene] [start] [end] [samples] [camera] [res_x] [res_y]
 
 set -euo pipefail
 
@@ -43,8 +43,12 @@ USD_SCENE="${1:-assets/week7/usdvol_cloud_scene.usda}"
 FRAME_START="${2:-1}"
 FRAME_END="${3:-20}"
 SAMPLES="${4:-256}"
+CAMERA_ARG="${5:-}"                 # e.g. NadirCamera; default MainCamera
+CAMERA="${CAMERA_ARG:-MainCamera}"
+RES_X="${6:-1280}"
+RES_Y="${7:-720}"
 
-RUN_NAME="$(basename "${USD_SCENE%.*}")_cycles"
+RUN_NAME="$(basename "${USD_SCENE%.*}")_cycles${CAMERA_ARG:+_${CAMERA_ARG}}"
 OUT_DIR="$OPENUSD_CLD_DATAROOT/renders/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
@@ -61,8 +65,8 @@ echo "Out:   $OUT_DIR"
     --vdb assets/week7/vdbs/cloud_density.vdb \
     --out "$OUT_DIR/frame_" \
     --frame-start "$FRAME_START" --frame-end "$FRAME_END" \
-    --samples "$SAMPLES" --res 1280 720 \
-    --camera MainCamera --anisotropy 0.85 \
+    --samples "$SAMPLES" --res "$RES_X" "$RES_Y" \
+    --camera "$CAMERA" --anisotropy 0.85 \
     $( [ "$FRAME_END" -gt "$FRAME_START" ] && echo --skip-existing )
 # --skip-existing only for multi-frame runs: it resumes after preemption, but
 # on a single-frame rerun it silently skips the stale frame from a previous
