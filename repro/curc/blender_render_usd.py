@@ -44,6 +44,9 @@ def parse_args():
                         "tone-mapped PNG — required for quantitative validation")
     p.add_argument("--world-strength", type=float, default=0.4,
                    help="background/sky strength; use 0 for sun-only validation renders")
+    p.add_argument("--flat-albedo", type=float, default=None,
+                   help="replace all mesh materials with a Lambertian gray of this "
+                        "albedo (match EaR3T's surface_albedo for validation)")
     return p.parse_args(argv)
 
 
@@ -161,6 +164,23 @@ def main():
         print("[curc] WARNING: no volume object in scene — rendering surfaces only")
     for v in vols:
         assign_cloud_material(v, args.anisotropy, args.density_scale, args.ssa)
+
+    if args.flat_albedo is not None:
+        mat = bpy.data.materials.new("FlatLambertian")
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes["Principled BSDF"]
+        a = args.flat_albedo
+        bsdf.inputs["Base Color"].default_value = (a, a, a, 1.0)
+        bsdf.inputs["Roughness"].default_value = 1.0
+        for k in ("Specular IOR Level", "Specular"):
+            if k in bsdf.inputs:
+                bsdf.inputs[k].default_value = 0.0
+                break
+        for o in bpy.data.objects:
+            if o.type == "MESH":
+                o.data.materials.clear()
+                o.data.materials.append(mat)
+        print(f"[curc] all mesh surfaces -> Lambertian albedo {a}")
 
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"

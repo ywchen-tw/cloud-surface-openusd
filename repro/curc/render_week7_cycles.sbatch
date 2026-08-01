@@ -23,7 +23,7 @@
 #   aa100       A100, no RT cores — works, but slower for Cycles
 #
 # Usage:
-#   sbatch repro/curc/render_week7_cycles.sbatch [usd_scene] [start] [end] [samples] [camera] [res_x] [res_y]
+#   sbatch repro/curc/render_week7_cycles.sbatch [usd_scene] [start] [end] [samples] [camera] [res_x] [res_y] ["extra driver flags"]
 
 set -euo pipefail
 
@@ -39,6 +39,7 @@ CAMERA_ARG="${5:-}"                 # e.g. NadirCamera; default MainCamera
 CAMERA="${CAMERA_ARG:-MainCamera}"
 RES_X="${6:-1280}"
 RES_Y="${7:-720}"
+EXTRA="${8:-}"                      # extra driver flags, e.g. "--exr --world-strength 0"
 
 RUN_NAME="$(basename "${USD_SCENE%.*}")_cycles${CAMERA_ARG:+_${CAMERA_ARG}}"
 OUT_DIR="$OPENUSD_CLD_DATAROOT/renders/$RUN_NAME"
@@ -55,11 +56,11 @@ echo "Out:   $OUT_DIR"
     --out "$OUT_DIR/frame_" \
     --frame-start "$FRAME_START" --frame-end "$FRAME_END" \
     --samples "$SAMPLES" --res "$RES_X" "$RES_Y" \
-    --camera "$CAMERA" --anisotropy 0.85
+    --camera "$CAMERA" --anisotropy 0.85 $EXTRA
 
 # Assemble a preview mp4 if ffmpeg is available (module or system).
 module load ffmpeg 2>/dev/null || true
-if command -v ffmpeg >/dev/null; then
+if command -v ffmpeg >/dev/null && ls "$OUT_DIR"/frame_*.png >/dev/null 2>&1; then
     ffmpeg -y -framerate 8 -start_number "$FRAME_START" \
         -i "$OUT_DIR/frame_%04d.png" -pix_fmt yuv420p "$OUT_DIR/preview.mp4"
     echo "Wrote $OUT_DIR/preview.mp4"

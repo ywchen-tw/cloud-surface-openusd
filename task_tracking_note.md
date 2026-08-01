@@ -75,9 +75,19 @@ with `-p artxpro6000` or `-p aa100` (edit `#SBATCH --partition` or pass
    Appearance fixes that made it work: Principled Volume color = SSA (~1),
    `cycles.volume_bounces=16` (defaults rendered black smoke). Beware stale
    frames when re-rendering with new settings — delete old PNGs first.
-2. **Nadir validation render** (sbatch now takes camera/res args 5-7):
-   `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 1024 NadirCamera 128 128`
-   (Blanca variant identical args). Output dir gets `_NadirCamera` suffix.
+2. ~~Nadir geometry~~ DONE: 128x128 ortho sensor verified (tile edge-to-edge,
+   pattern matches the quicklook tau map). Blocky translucent veils over the
+   ocean = real optically thin cloud fringe (beta 5e-4..5e-3), NOT a bug —
+   isolation renders proved the ocean surface itself is clean.
+3. **Validation render** (scene-linear, sun-only, flat albedo — arg 8 passes
+   extra driver flags):
+   `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 4096 NadirCamera 128 128 "--exr --world-strength 0 --flat-albedo 0.05"`
+   -> writes frame_0001.exr + frame_0001.npy (radiance array).
+4. **Run `validation/compare_ear3t.py`** (er3t env, CPU): scaffolded 2026-08-01;
+   check the VERIFY-marked lines (cld object field names, HG g pass-through,
+   azimuth convention) against the installed er3t before first run:
+   `conda run -n er3t python validation/compare_ear3t.py --run-ear3t --usd-npy $OPENUSD_CLD_DATAROOT/renders/les_cloud_scene_cycles_NadirCamera/frame_0001.npy`
+   Outputs the side-by-side figure + RMSE/Pearson metrics JSON (the headline).
 3. **`validation/compare_ear3t.py`** (not started): run EaR3T 3D-RT on
    `data/processed/cloud_field_64x64x32.npz` (`ext` + `ssa` + `asymmetry_g`
    keys) in the `er3t` env at the SAME SZA 30°/az 40° geometry, compare with
