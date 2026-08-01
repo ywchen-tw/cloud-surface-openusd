@@ -47,12 +47,19 @@ def parse_args():
     p.add_argument("--flat-albedo", type=float, default=None,
                    help="replace all mesh materials with a Lambertian gray of this "
                         "albedo (match EaR3T's surface_albedo for validation)")
+    p.add_argument("--device", choices=("auto", "optix", "cuda", "cpu"), default="auto",
+                   help="render device; OptiX shows zero-radiance leaf-box artifacts "
+                        "on this volume — use cpu (or cuda) for validation renders")
     return p.parse_args(argv)
 
 
-def enable_gpu(scene):
+def enable_gpu(scene, device="auto"):
+    if device == "cpu":
+        scene.cycles.device = "CPU"
+        return "CPU"
     prefs = bpy.context.preferences.addons["cycles"].preferences
-    for dev_type in ("OPTIX", "CUDA"):
+    order = ("CUDA",) if device == "cuda" else ("OPTIX",) if device == "optix" else ("OPTIX", "CUDA")
+    for dev_type in order:
         try:
             prefs.compute_device_type = dev_type
         except TypeError:
@@ -184,7 +191,7 @@ def main():
 
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
-    dev = enable_gpu(scene)
+    dev = enable_gpu(scene, args.device)
     scene.cycles.samples = args.samples
     # Multiple scattering is what makes clouds white; Cycles defaults to 0.
     scene.cycles.volume_bounces = args.volume_bounces
