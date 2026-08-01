@@ -28,7 +28,7 @@ ALBEDO_TEX_REL = "../../data/processed/arctic_albedo_texture.png"  # gen_arctic_
 
 OUT_USD = os.path.join(ROOT, "assets", "phase8", "les_cloud_arctic_scene.usda")
 SUN_SZA_DEG = 55.0   # polar low sun, long shadows
-FRAMES = 20
+FRAMES = 100
 FPS = 8              # matches the ffmpeg preview assembly in the sbatch scripts
 
 

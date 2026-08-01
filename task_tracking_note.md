@@ -4,7 +4,40 @@
 > Written 2026-08-01. Full environment details: `repro/curc/README.md`.
 > Project plan and checkboxes: `plan.md` (Phase 8 section).
 
-## Where things stand (2026-08-01 end of day)
+## Where things stand (2026-08-01 evening)
+
+**IN FLIGHT: Blanca GPU job `27298324`** (`usd-cloud-cycles-blanca`) — Arctic
+hero fly-through, frames 1..100 @ 512 samples, ~65 s/frame (~2 h total),
+output `$OPENUSD_CLD_DATAROOT/renders/les_cloud_arctic_scene_cycles_MainCamera720/`.
+
+**KNOWN PROBLEM with that job:** it was submitted while the scene's camera
+animation still ended at frame 20 (`FRAMES = 20`), so frames 21-100 render
+as identical static copies of frame 20. The scene has since been re-authored
+with `FRAMES = 100` (endTimeCode 100), but the running job loaded the OLD
+scene at startup. RECOVERY: cancel it (`module load slurm/blanca; scancel
+27298324`), delete the stale frames (`rm .../les_cloud_arctic_scene_cycles_MainCamera720/frame_*.png`
+— they follow the old 20-frame path and would be kept by --skip-existing,
+glitching the animation), then resubmit 1..100 (see Hero video below).
+If it instead ran to completion, only frames 1-20 are usable.
+
+### Hero video pipeline (for the personal website)
+- Scene: `assets/phase8/les_cloud_arctic_scene.usda` from
+  `src/author_arctic_hero.py` (19.2 km 3x3-tiled LES clouds, SZA 55 sun,
+  camera timeSamples frames 1-100 @ 8 fps = 12.5 s clip).
+- Surface: procedural albedo TEXTURE (`src/gen_arctic_albedo.py` ->
+  `data/processed/arctic_albedo_texture.png`, 2048^2). REGENERATE it if
+  scratch purged it, or the surface renders textureless. Flat polygons were
+  rejected (read as paper cutouts).
+- Submit (GPU hero route; dual clusters):
+  `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_arctic_scene.usda 1 100 512`
+  (Blanca: `module load slurm/blanca; sbatch repro/curc/render_week7_cycles_blanca.sbatch <same args>`)
+  1080p final: append `MainCamera 1920 1080`.
+- The sbatch auto-assembles `preview.mp4` (ffmpeg, 8 fps) when frames
+  finish. If a job dies after frames are done, assemble manually:
+  `ffmpeg -framerate 8 -i frame_%04d.png -pix_fmt yuv420p preview.mp4`.
+- Blanca preemption: multi-frame runs pass --skip-existing and resume at
+  the first unfinished frame (0-byte placeholders are auto-deleted).
+
 
 Phase 8 validation loop is CLOSED: hero render, nadir sensor render, EaR3T
 run, and quantitative comparison all work. FINAL headline: **r = 0.988, rel RMSE 13.9%**
