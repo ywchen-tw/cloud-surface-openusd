@@ -72,3 +72,7 @@ renders/*
 *.usdtmp
 *.tmp
 *.log
+
+# Slurm job logs
+sbatch-output_*.txt
+slurm-*.out
