@@ -83,22 +83,17 @@ def create_ocean(stage, size_x, size_y, periodic=False):
     bind(mesh, ocean_mat)
 
 
-def create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=False, mirror=False):
-    """periodic: 3x3 neighbor tiles (validation: plain wrap, matching MCARaTS
-    cyclic BC). mirror: reflection-pad the neighbors instead — the LES tile is
-    NOT periodic, so plain tiling cuts clouds into straight walls at seams;
-    mirrored tiles are continuous across every seam (hero renders only)."""
+def create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=False):
+    """periodic: 3x3 plain-wrap neighbor tiles (validation only — matches
+    MCARaTS cyclic BC, which wraps and does not mirror). For seamless HERO
+    tiling use the pre-mirrored VDB (grid_to_vdb.py --mirror3x3) in a single
+    prim: mirroring by instance transform (scale -1) causes GPU volume
+    banding (docs/rendering_artifacts.md #6)."""
     UsdGeom.Xform.Define(stage, "/World/CloudVolume")
     shifts = [(i, j) for i in (-1, 0, 1) for j in (-1, 0, 1)] if periodic else [(0, 0)]
     for i, j in shifts:
         tile = UsdGeom.Xform.Define(stage, f"/World/CloudVolume/Tile_{i + 1}_{j + 1}")
-        if mirror:
-            tx = 2.0 * size_x if i == 1 else 0.0
-            ty = 2.0 * size_y if j == 1 else 0.0
-            tile.AddTranslateOp().Set(Gf.Vec3d(tx, ty, 0.0))
-            tile.AddScaleOp().Set(Gf.Vec3f(-1.0 if i else 1.0, -1.0 if j else 1.0, 1.0))
-        else:
-            tile.AddTranslateOp().Set(Gf.Vec3d(i * size_x, j * size_y, 0.0))
+        tile.AddTranslateOp().Set(Gf.Vec3d(i * size_x, j * size_y, 0.0))
         volume = UsdVol.Volume.Define(stage, tile.GetPath().AppendChild("Volume"))
         volume.CreateExtentAttr([Gf.Vec3f(0, 0, 0), Gf.Vec3f(size_x, size_y, size_z)])
 

@@ -69,6 +69,12 @@ tiling + bounces). Remaining ~14%: Rayleigh-skylight deficit in shadows
 
 ## Gotchas (will bite you if forgotten)
 
+0. **Read `docs/rendering_artifacts.md` first** — the full catalog of every
+   rendering artifact hit so far (VDB format, OptiX zero-boxes, CUDA
+   banding on negative-scale volumes, tile-seam cut walls, fringe veils,
+   stale-frame traps) with root causes and the standing rules
+   (validation = CPU only; never mirror volumes by transform).
+
 1. **VDB file-format**: Blender 4.5 reads OpenVDB file format ≤224. The
    `openusd` env's OpenVDB 13 writes 225 → Blender silently drops the volume
    (warning only in the log). ALWAYS write Blender-bound VDBs with the

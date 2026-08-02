@@ -32,7 +32,26 @@ except ImportError:  # pragma: no cover - older boost-python bindings
 MIN_BETA_DEFAULT = 5e-4
 
 
-def main(raw_path: str, out_path: str, min_beta: float = MIN_BETA_DEFAULT) -> None:
+def mirror3x3(beta_xyz):
+    """Reflection-pad to a 3x3 layout as actual voxels (center tile original,
+    neighbors flipped so the field is continuous across every seam).
+
+    This exists because mirroring by instance transform (scale -1) triggers
+    volume ray-march banding on Cycles GPU backends — never mirror volumes by
+    transform (docs/rendering_artifacts.md #6). One positive-scale prim
+    referencing this grid renders clean.
+    """
+    import numpy as np  # local alias for clarity
+
+    def row(block_y):
+        return np.concatenate([block_y[::-1], block_y, block_y[::-1]], axis=0)
+
+    mid = np.concatenate([beta_xyz[:, ::-1], beta_xyz, beta_xyz[:, ::-1]], axis=1)
+    return row(mid)
+
+
+def main(raw_path: str, out_path: str, min_beta: float = MIN_BETA_DEFAULT,
+         mirror: bool = False) -> None:
     json_path = os.path.splitext(raw_path)[0] + ".json"
     with open(json_path) as fh:
         meta = json.load(fh)
@@ -50,14 +69,21 @@ def main(raw_path: str, out_path: str, min_beta: float = MIN_BETA_DEFAULT) -> No
         beta_xyz[cut & (beta_xyz > 0)] = 0.0
         print(f"cut beta < {min_beta:g} 1/m: worst-column tau lost {tau_lost:.3f}")
 
+    dx, dy, dz = meta["dx_m"], meta["dy_m"], meta["dz_m"]
+    tx = ty = 0.0
+    if mirror:
+        # World offset so the CENTER tile stays at 0..nx*dx (the mirrored
+        # neighbors extend one tile west/south into negative coordinates).
+        tx, ty = -nx * dx, -ny * dy
+        beta_xyz = mirror3x3(beta_xyz)
+
     grid = vdb.FloatGrid()
     grid.copyFromArray(beta_xyz)
     grid.name = meta.get("grid_name", "density")
     grid.gridClass = vdb.GridClass.FOG_VOLUME
-    # Anisotropic voxels: index -> world in meters.
-    dx, dy, dz = meta["dx_m"], meta["dy_m"], meta["dz_m"]
+    # Anisotropic voxels: index -> world in meters (plus tile offset).
     grid.transform = vdb.createLinearTransform(
-        [[dx, 0, 0, 0], [0, dy, 0, 0], [0, 0, dz, 0], [0, 0, 0, 1]]
+        [[dx, 0, 0, 0], [0, dy, 0, 0], [0, 0, dz, 0], [tx, ty, 0, 1]]
     )
     grid["units"] = meta.get("units", "extinction_per_meter")
     grid["ssa"] = float(meta.get("ssa", 1.0))
@@ -68,14 +94,21 @@ def main(raw_path: str, out_path: str, min_beta: float = MIN_BETA_DEFAULT) -> No
     vdb.write(out_path, grids=[grid])
 
     active = int((beta_xyz > 0).sum())
-    print(f"wrote {out_path}")
-    print(f"  grid '{grid.name}' fogVolume {nx}x{ny}x{nz}, voxel {dx}x{dy}x{dz} m")
+    mx, my, _ = beta_xyz.shape
+    print(f"wrote {out_path}{' (3x3 mirrored)' if mirror else ''}")
+    print(f"  grid '{grid.name}' fogVolume {mx}x{my}x{nz}, voxel {dx}x{dy}x{dz} m, origin ({tx:.0f},{ty:.0f})")
     print(f"  beta_max {beta_xyz.max():.4g} 1/m, active voxels {active}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (3, 4):
+    argv = list(sys.argv[1:])
+    do_mirror = "--mirror3x3" in argv
+    if do_mirror:
+        argv.remove("--mirror3x3")
+    if len(argv) not in (2, 3):
         sys.exit(__doc__ + "\nOptional 3rd arg: min_beta cutoff in 1/m "
-                 f"(default {MIN_BETA_DEFAULT:g}; 0 keeps the full field)")
-    main(sys.argv[1], sys.argv[2],
-         float(sys.argv[3]) if len(sys.argv) == 4 else MIN_BETA_DEFAULT)
+                 f"(default {MIN_BETA_DEFAULT:g}; 0 keeps the full field).\n"
+                 "Optional flag: --mirror3x3 (reflection-padded hero grid)")
+    main(argv[0], argv[1],
+         float(argv[2]) if len(argv) == 3 else MIN_BETA_DEFAULT,
+         mirror=do_mirror)

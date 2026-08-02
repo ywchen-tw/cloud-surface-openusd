@@ -20,11 +20,22 @@ import sys
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pxr import UsdVol
+
 from author_cloud_usd import (
-    ROOT, SUN_SAA_DEG, bind, create_cloud_volume, load_domain, look_at_matrix,
+    ROOT, SUN_SAA_DEG, bind, load_domain, look_at_matrix,
 )
 
+# Pre-mirrored 3x3 grid (grid_to_vdb.py --mirror3x3): seamless reflection
+# padding baked into voxels, ONE positive-scale prim — transform-mirrored
+# instances cause GPU volume banding (docs/rendering_artifacts.md #6).
+MIRROR_VDB_REL = "../week7/vdbs/cloud_density_mirror3x3.vdb"
+
 ALBEDO_TEX_REL = "../../data/processed/arctic_albedo_texture.png"  # gen_arctic_albedo.py
+# Surface carpet extends far beyond the 19.2 km cloud domain so no camera
+# angle ever sees the "table edge" of the quad. Texture ice edge lands at
+# y ~ 9.6 km (v=0.55 of this span); keep gen_arctic_albedo.py in sync.
+SURF_LO, SURF_HI = -25600.0, 38400.0
 
 OUT_USD = os.path.join(ROOT, "assets", "phase8", "les_cloud_arctic_scene.usda")
 SUN_SZA_DEG = 55.0   # polar low sun, long shadows
@@ -70,6 +81,18 @@ def create_arctic_surface(stage, lo, hi):
     bind(mesh, mat)
 
 
+def create_mirrored_cloud_volume(stage, meta, size_x, size_y, size_z):
+    UsdGeom.Xform.Define(stage, "/World/CloudVolume")
+    volume = UsdVol.Volume.Define(stage, "/World/CloudVolume/Volume")
+    volume.CreateExtentAttr([Gf.Vec3f(-size_x, -size_y, 0),
+                             Gf.Vec3f(2 * size_x, 2 * size_y, size_z)])
+    field = UsdVol.OpenVDBAsset.Define(stage, "/World/CloudVolume/Volume/Density")
+    field.CreateFilePathAttr(MIRROR_VDB_REL)
+    field.CreateFieldNameAttr(meta.get("grid_name", "density"))
+    field.CreateFieldClassAttr(UsdVol.Tokens.fogVolume)
+    volume.CreateFieldRelationship("density", field.GetPath())
+
+
 def create_sun(stage):
     sun = UsdLux.DistantLight.Define(stage, "/World/Lighting/Sun")
     sun.CreateIntensityAttr(3000.0)
@@ -86,7 +109,7 @@ def smoothstep(t):
 
 def create_flythrough_camera(stage):
     cam = UsdGeom.Camera.Define(stage, "/World/Camera/MainCamera")
-    cam.CreateFocalLengthAttr(24.0)
+    cam.CreateFocalLengthAttr(35.0)
     cam.CreateClippingRangeAttr(Gf.Vec2f(10.0, 90000.0))
     op = UsdGeom.Xformable(cam).AddTransformOp()
 
@@ -95,8 +118,8 @@ def create_flythrough_camera(stage):
     # 100 m voxels look like camera blur when viewed from 3 km), and the ice
     # edge reads as geography. ~45 deg down-look, drifting NE so open water
     # and floes lead, the ice edge + melt ponds arrive in the upper frame.
-    eye_a, eye_b = (0.0, -4000.0, 9500.0), (6400.0, 1000.0, 8500.0)
-    tgt_a, tgt_b = (4500.0, 4500.0, 0.0), (9600.0, 10500.0, 0.0)
+    eye_a, eye_b = (0.0, -3000.0, 9200.0), (6400.0, 2000.0, 8400.0)
+    tgt_a, tgt_b = (3200.0, 4000.0, 0.0), (9600.0, 10500.0, 0.0)
     for f in range(1, FRAMES + 1):
         t = smoothstep((f - 1) / (FRAMES - 1))
         eye = tuple(a + t * (b - a) for a, b in zip(eye_a, eye_b))
@@ -122,15 +145,14 @@ def main():
     stage.SetDefaultPrim(world.GetPrim())
     Usd.ModelAPI(world.GetPrim()).SetKind("assembly")
 
-    lo, hi = -size_x, 2 * size_x
-    create_arctic_surface(stage, lo, hi)
-    create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=True, mirror=True)
+    create_arctic_surface(stage, SURF_LO, SURF_HI)
+    create_mirrored_cloud_volume(stage, meta, size_x, size_y, size_z)
     create_sun(stage)
     create_flythrough_camera(stage)
 
     stage.GetRootLayer().Save()
     print(f"wrote {OUT_USD}")
-    print(f"  {hi - lo:.0f} m domain, frames 1-{FRAMES} @ {FPS} fps, sun SZA {SUN_SZA_DEG:.0f}")
+    print(f"  surface {SURF_HI - SURF_LO:.0f} m, clouds 19200 m mirrored, frames 1-{FRAMES} @ {FPS} fps, SZA {SUN_SZA_DEG:.0f}")
 
 
 if __name__ == "__main__":
