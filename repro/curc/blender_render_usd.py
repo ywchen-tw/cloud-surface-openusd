@@ -54,6 +54,9 @@ def parse_args():
                         "on this volume — use cpu (or cuda) for validation renders")
     p.add_argument("--hide-volumes", action="store_true",
                    help="render surfaces only (isolate the surface look / debug artifacts)")
+    p.add_argument("--volume-step-rate", type=float, default=1.0,
+                   help="Cycles volume step rate; <1 = finer marching (0.25-0.5 "
+                        "reduces GPU transmittance banding, costs render time)")
     return p.parse_args(argv)
 
 
@@ -175,6 +178,14 @@ def main():
         print("[curc] WARNING: no volume object in scene — rendering surfaces only")
     for v in vols:
         assign_cloud_material(v, args.anisotropy, args.density_scale, args.ssa)
+        # GPU NanoVDB conversion defaults to reduced precision; quantized
+        # density in the 1e-4..1e-1 range shows as banded stripes in surface
+        # shadow transmittance (docs/rendering_artifacts.md). Full float +
+        # no clipping keeps GPU sampling faithful to the physical field.
+        if hasattr(v.data, "render"):
+            if hasattr(v.data.render, "precision"):
+                v.data.render.precision = "FULL"
+            v.data.render.clipping = 0.0
     if args.hide_volumes:
         for v in vols:
             v.hide_render = True
@@ -204,6 +215,8 @@ def main():
     # Multiple scattering is what makes clouds white; Cycles defaults to 0.
     scene.cycles.volume_bounces = args.volume_bounces
     scene.cycles.max_bounces = max(scene.cycles.max_bounces, args.volume_bounces)
+    scene.cycles.volume_step_rate = args.volume_step_rate
+    scene.cycles.volume_max_steps = 4096
     scene.render.resolution_x, scene.render.resolution_y = args.res
     if args.exr:
         scene.render.image_settings.file_format = "OPEN_EXR"
