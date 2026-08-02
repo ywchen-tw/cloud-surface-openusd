@@ -57,6 +57,10 @@ def parse_args():
     p.add_argument("--volume-step-rate", type=float, default=1.0,
                    help="Cycles volume step rate; <1 = finer marching (0.25-0.5 "
                         "reduces GPU transmittance banding, costs render time)")
+    p.add_argument("--no-denoise", action="store_true",
+                   help="disable OpenImageDenoise (A/B for streak artifacts: the "
+                        "denoiser smears high-variance volume regions into wavy "
+                        "horizontal scanlines at low sample counts)")
     return p.parse_args(argv)
 
 
@@ -124,7 +128,12 @@ def scene_bounds():
 def ensure_camera(scene, name_hint):
     cams = [o for o in bpy.data.objects if o.type == "CAMERA"]
     if name_hint:
-        preferred = [c for c in cams if name_hint.lower() in c.name.lower()]
+        hint = name_hint.lower()
+        # Substring match, then prefix match — so a suffixed hint like
+        # "MainCameraNoDN" (used to route A/B tests to distinct output
+        # dirs via the sbatch OUT_DIR naming) still selects MainCamera.
+        preferred = ([c for c in cams if hint in c.name.lower()]
+                     or [c for c in cams if hint.startswith(c.name.lower())])
         if preferred:
             cams = preferred
     if cams:
@@ -217,6 +226,10 @@ def main():
     scene.cycles.max_bounces = max(scene.cycles.max_bounces, args.volume_bounces)
     scene.cycles.volume_step_rate = args.volume_step_rate
     scene.cycles.volume_max_steps = 4096
+    if args.no_denoise:
+        scene.cycles.use_denoising = False
+        for vl in scene.view_layers:
+            vl.cycles.use_denoising = False
     scene.render.resolution_x, scene.render.resolution_y = args.res
     if args.exr:
         scene.render.image_settings.file_format = "OPEN_EXR"
@@ -234,7 +247,8 @@ def main():
     ensure_light_and_world(scene, args.world_strength)
 
     ext = "exr" if args.exr else "png"
-    print(f"[curc] device={dev} samples={args.samples} res={args.res} camera={cam_info}")
+    print(f"[curc] device={dev} samples={args.samples} res={args.res} camera={cam_info} "
+          f"denoise={'off' if args.no_denoise else scene.cycles.denoiser}")
     print(f"[curc] rendering frames {args.frame_start}..{args.frame_end} -> {args.out}####.{ext}")
     bpy.ops.render.render(animation=True)
 
