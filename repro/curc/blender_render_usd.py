@@ -50,6 +50,8 @@ def parse_args():
     p.add_argument("--device", choices=("auto", "optix", "cuda", "cpu"), default="auto",
                    help="render device; OptiX shows zero-radiance leaf-box artifacts "
                         "on this volume — use cpu (or cuda) for validation renders")
+    p.add_argument("--hide-volumes", action="store_true",
+                   help="render surfaces only (isolate the surface look / debug artifacts)")
     return p.parse_args(argv)
 
 
@@ -171,6 +173,10 @@ def main():
         print("[curc] WARNING: no volume object in scene — rendering surfaces only")
     for v in vols:
         assign_cloud_material(v, args.anisotropy, args.density_scale, args.ssa)
+    if args.hide_volumes:
+        for v in vols:
+            v.hide_render = True
+        print(f"[curc] --hide-volumes: {len(vols)} volume object(s) excluded from render")
 
     if args.flat_albedo is not None:
         mat = bpy.data.materials.new("FlatLambertian")

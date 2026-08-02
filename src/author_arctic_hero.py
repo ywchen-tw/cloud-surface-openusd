@@ -90,13 +90,13 @@ def create_flythrough_camera(stage):
     cam.CreateClippingRangeAttr(Gf.Vec2f(10.0, 90000.0))
     op = UsdGeom.Xformable(cam).AddTransformOp()
 
-    # Steep aerial survey: stay well above the cloud tops (2240 m) and look
-    # down at ~45-50 deg so the sightline crosses the broken cloud deck once
-    # instead of skimming through kilometres of it (a shallow slant view
-    # turns the whole lower frame into murk). The path drifts NE: open water
-    # + floes under the clouds first, then the ice edge and melt ponds.
-    eye_a, eye_b = (-1000.0, -500.0, 5400.0), (4600.0, 5200.0, 4600.0)
-    tgt_a, tgt_b = (1800.0, 3000.0, 0.0), (7800.0, 9800.0, 0.0)
+    # High-altitude aerial survey (~9 km): from up here the 1-2 km cumuli
+    # read as a crisp cloud field instead of frame-filling soft blobs (their
+    # 100 m voxels look like camera blur when viewed from 3 km), and the ice
+    # edge reads as geography. ~45 deg down-look, drifting NE so open water
+    # and floes lead, the ice edge + melt ponds arrive in the upper frame.
+    eye_a, eye_b = (0.0, -4000.0, 9500.0), (6400.0, 1000.0, 8500.0)
+    tgt_a, tgt_b = (4500.0, 4500.0, 0.0), (9600.0, 10500.0, 0.0)
     for f in range(1, FRAMES + 1):
         t = smoothstep((f - 1) / (FRAMES - 1))
         eye = tuple(a + t * (b - a) for a, b in zip(eye_a, eye_b))
@@ -124,7 +124,7 @@ def main():
 
     lo, hi = -size_x, 2 * size_x
     create_arctic_surface(stage, lo, hi)
-    create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=True)
+    create_cloud_volume(stage, meta, size_x, size_y, size_z, periodic=True, mirror=True)
     create_sun(stage)
     create_flythrough_camera(stage)
 
