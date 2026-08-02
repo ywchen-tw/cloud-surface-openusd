@@ -4,21 +4,21 @@
 > Written 2026-08-01. Full environment details: `repro/curc/README.md`.
 > Project plan and checkboxes: `plan.md` (Phase 8 section).
 
-## Where things stand (2026-08-01 evening)
+## Where things stand (2026-08-02, after the stripe hunt)
 
-**IN FLIGHT: Blanca GPU job `27298324`** (`usd-cloud-cycles-blanca`) — Arctic
-hero fly-through, frames 1..100 @ 512 samples, ~65 s/frame (~2 h total),
-output `$OPENUSD_CLD_DATAROOT/renders/les_cloud_arctic_scene_cycles_MainCamera720/`.
+**Stripe saga CLOSED** (docs/rendering_artifacts.md #6): the wavy scanline
+stripes in the hero frames were the DENOISER (OpenImageDenoise, on by
+default) streaking noisy 512-sample input — confirmed by A/B on frame 81
+(`--no-denoise` = grain only; 2048 samples + denoise = clean). Two earlier
+theories (negative-scale mirror instances, HALF-precision NanoVDB) were
+refuted by renders; their fixes were kept anyway (baked-mirror VDB,
+precision=FULL + clipping=0). **Hero frames now render at 2048 samples.**
 
-**KNOWN PROBLEM with that job:** it was submitted while the scene's camera
-animation still ended at frame 20 (`FRAMES = 20`), so frames 21-100 render
-as identical static copies of frame 20. The scene has since been re-authored
-with `FRAMES = 100` (endTimeCode 100), but the running job loaded the OLD
-scene at startup. RECOVERY: cancel it (`module load slurm/blanca; scancel
-27298324`), delete the stale frames (`rm .../les_cloud_arctic_scene_cycles_MainCamera720/frame_*.png`
-— they follow the old 20-frame path and would be kept by --skip-existing,
-glitching the animation), then resubmit 1..100 (see Hero video below).
-If it instead ran to completion, only frames 1-20 are usable.
+NEXT: full 100-frame 1080p website master at 2048 samples (see Hero video
+below). Optional cleanups on the table: rebuild the hero mirror VDB with
+min_beta ~2e-3 to kill the blue veil slabs (#4) now more visible with
+clipping=0; re-run the validation render with the clipping=0 driver
+(the r=0.988 run silently dropped beta in [5e-4,1e-3) on the USD side).
 
 ### Hero video pipeline (for the personal website)
 - Scene: `assets/phase8/les_cloud_arctic_scene.usda` from
@@ -28,10 +28,10 @@ If it instead ran to completion, only frames 1-20 are usable.
   `data/processed/arctic_albedo_texture.png`, 2048^2). REGENERATE it if
   scratch purged it, or the surface renders textureless. Flat polygons were
   rejected (read as paper cutouts).
-- Submit (GPU hero route; dual clusters):
-  `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_arctic_scene.usda 1 100 512`
+- Submit (GPU hero route; dual clusters). 2048 samples MINIMUM — at 512
+  the denoiser streaks scanlines across veil-shadow regions (artifacts #6):
+  `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_arctic_scene.usda 1 100 2048 MainCamera 1920 1080`
   (Blanca: `module load slurm/blanca; sbatch repro/curc/render_week7_cycles_blanca.sbatch <same args>`)
-  1080p final: append `MainCamera 1920 1080`.
 - The sbatch auto-assembles `preview.mp4` (ffmpeg, 8 fps) when frames
   finish. If a job dies after frames are done, assemble manually:
   `ffmpeg -framerate 8 -i frame_%04d.png -pix_fmt yuv420p preview.mp4`.
