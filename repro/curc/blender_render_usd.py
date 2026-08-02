@@ -28,6 +28,8 @@ def parse_args():
     p.add_argument("--out", required=True, help="output path prefix (frames get %%04d.png)")
     p.add_argument("--frame-start", type=int, default=1)
     p.add_argument("--frame-end", type=int, default=20)
+    p.add_argument("--frame-step", type=int, default=1,
+                   help="render every Nth frame (spot-check a long sequence)")
     p.add_argument("--samples", type=int, default=256)
     p.add_argument("--res", type=int, nargs=2, default=[1280, 720], metavar=("X", "Y"))
     p.add_argument("--camera", default=None, help="prefer camera object whose name contains this")
@@ -211,6 +213,7 @@ def main():
         scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = args.out
     scene.frame_start, scene.frame_end = args.frame_start, args.frame_end
+    scene.frame_step = args.frame_step
     scene.render.use_overwrite = not args.skip_existing
     scene.render.use_placeholder = args.skip_existing
 
@@ -226,7 +229,7 @@ def main():
         # Dump each frame as float32 npy (mean of RGB — the scene is
         # monochromatic gray) so validation scripts need no EXR reader.
         import numpy as np
-        for f in range(args.frame_start, args.frame_end + 1):
+        for f in range(args.frame_start, args.frame_end + 1, args.frame_step):
             path = f"{args.out}{f:04d}.exr"
             img = bpy.data.images.load(path)
             w, h = img.size
