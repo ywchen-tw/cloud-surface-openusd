@@ -14,24 +14,48 @@ theories (negative-scale mirror instances, HALF-precision NanoVDB) were
 refuted by renders; their fixes were kept anyway (baked-mirror VDB,
 precision=FULL + clipping=0). **Hero frames now render at 2048 samples.**
 
-NEXT: full 100-frame 1080p website master at 2048 samples (see Hero video
-below). Optional cleanups on the table: rebuild the hero mirror VDB with
-min_beta ~2e-3 to kill the blue veil slabs (#4) now more visible with
-clipping=0; re-run the validation render with the clipping=0 driver
-(the r=0.988 run silently dropped beta in [5e-4,1e-3) on the USD side).
+Also DONE 2026-08-02:
+- Hero mirror VDB REBUILT with min_beta 2e-3 (was 5e-4): kills the blue
+  veil slabs / hard-edged shadow polygons (#4) that clipping=0 had made
+  more visible, and removes the denoiser's main variance source. Now
+  36,468 active voxels; worst-column tau lost 0.67 (cloud tau_max ~53 —
+  cosmetically nil). HERO ONLY — the validation VDB
+  (`cloud_density.vdb`) keeps 5e-4. Revert:
+  `conda run -n vdbtools python src/grid_to_vdb.py data/processed/cloud_ext_64x64x32.f32 assets/week7/vdbs/cloud_density_mirror3x3.vdb 5e-4 --mirror3x3`
+- Master output dir cleared; striped-era frames archived to
+  `renders/les_cloud_arctic_scene_cycles_MainCamera_512denoise_old`.
+- Driver gained `--no-denoise` (A/B tool) and camera-hint prefix matching
+  (pass e.g. `MainCameraNoDN` to give a test run its own output dir while
+  still selecting MainCamera).
+
+NEXT (in order):
+1. Spot-check the rebuilt-VDB scene, then the 100-frame 1080p website
+   master at 2048 samples (commands under Hero video below).
+2. Re-run the validation render + compare with the clipping=0 driver:
+   the r=0.988 run silently dropped beta in [5e-4,1e-3) on the USD side
+   (EaR3T kept it), so the headline number may shift slightly. Reuse the
+   cached 1e9-photon h5 via `--ear3t-h5` — only the Cycles render reruns.
+3. Deliverables: copy the validation figure into docs/, one-pager,
+   postmortem (artifact catalog is the source), final mp4 at 8 fps.
 
 ### Hero video pipeline (for the personal website)
 - Scene: `assets/phase8/les_cloud_arctic_scene.usda` from
   `src/author_arctic_hero.py` (19.2 km 3x3-tiled LES clouds, SZA 55 sun,
   camera timeSamples frames 1-100 @ 8 fps = 12.5 s clip).
 - Surface: procedural albedo TEXTURE (`src/gen_arctic_albedo.py` ->
-  `data/processed/arctic_albedo_texture.png`, 2048^2). REGENERATE it if
-  scratch purged it, or the surface renders textureless. Flat polygons were
-  rejected (read as paper cutouts).
+  `data/processed/arctic_albedo_texture.png`, 3072^2 over the 64-km quad,
+  ~21 m/px). REGENERATE it if scratch purged it, or the surface renders
+  textureless. Flat polygons were rejected (read as paper cutouts).
 - Submit (GPU hero route; dual clusters). 2048 samples MINIMUM — at 512
-  the denoiser streaks scanlines across veil-shadow regions (artifacts #6):
-  `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_arctic_scene.usda 1 100 2048 MainCamera 1920 1080`
+  the denoiser streaks scanlines across veil-shadow regions (artifacts #6).
+  Spot-check first (scene/VDB changed), then full; spot frames land in the
+  master dir and Blanca's `--skip-existing` reuses them:
+  `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_arctic_scene.usda 1 100 2048 MainCamera 1920 1080 "--frame-step 10"`
+  then the same line without the `"--frame-step 10"` arg.
   (Blanca: `module load slurm/blanca; sbatch repro/curc/render_week7_cycles_blanca.sbatch <same args>`)
+  Timing: ~1 min/frame at 2048/720p on Blanca OPTIX -> expect ~2-3
+  min/frame at 1080p, ~4-5 h for 100 frames (Blanca 12 h limit is the
+  safer home; Alpine's 6 h works but is tight).
 - The sbatch auto-assembles `preview.mp4` (ffmpeg, 8 fps) when frames
   finish. If a job dies after frames are done, assemble manually:
   `ffmpeg -framerate 8 -i frame_%04d.png -pix_fmt yuv420p preview.mp4`.
@@ -104,12 +128,12 @@ tiling + bounces). Remaining ~14%: Rayleigh-skylight deficit in shadows
    pattern matches the quicklook tau map). Blocky translucent veils over the
    ocean = real optically thin cloud fringe (beta 5e-4..5e-3), NOT a bug —
    isolation renders proved the ocean surface itself is clean.
-3. **Validation render** (scene-linear, sun-only, flat albedo — arg 8 passes
-   extra driver flags):
-   `sbatch repro/curc/render_week7_cycles.sbatch assets/phase8/les_cloud_scene.usda 1 1 4096 NadirCamera 128 128 "--exr --world-strength 0 --flat-albedo 0.05"`
-   -> writes frame_0001.exr + frame_0001.npy (radiance array).
-4. ~~First USD-vs-EaR3T comparison~~ DONE 2026-08-01, current headline:
-   **r = 0.943, rel RMSE 22.2%** (CPU-rendered USD frame, azimuth-aligned,
+3. ~~Validation render~~ DONE (CPU route, scene-linear EXR, sun-only,
+   flat albedo 0.05). To RE-RUN with the clipping=0 driver (NEXT item 2
+   above — use the CPU sbatch and the periodic 3x3 scene):
+   `sbatch repro/curc/render_cycles_cpu.sbatch assets/phase8/les_cloud_scene_periodic.usda 1 1 4096 NadirCamera 128 128 "--exr --world-strength 0 --flat-albedo 0.05 --volume-bounces 64"`
+4. ~~First USD-vs-EaR3T comparison~~ DONE 2026-08-01, FINAL headline:
+   **r = 0.988, rel RMSE 13.9%** (periodic 3x3 CPU render, azimuth-aligned,
    vs 1e9-photon EaR3T on the identical field). Figure + metrics at
    `$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t_*`.
    KEY FINDING: OptiX GPU renders have a zero-radiance leaf-box artifact on
@@ -119,15 +143,12 @@ tiling + bounces). Remaining ~14%: Rayleigh-skylight deficit in shadows
    0.001 — EaR3T noise is not the bottleneck.
    The EaR3T h5 is cached there (`ear3t_rad_3d.h5`) — re-compare without
    re-running MC via `--ear3t-h5`. sbatch wrappers: `repro/curc/compare_ear3t*.sbatch`.
-5. **Close the physics gap** (largest first):
-   - USD shadows are true zero (sun-only scene, no molecular atmosphere);
-     EaR3T fills shadows with Rayleigh skylight (~0.02). Options: calibrated
-     uniform world strength in Cycles, or quantify-and-document as a known
-     renderer limitation (postmortem angle).
-   - Check shadow-displacement dipoles in the diff panel for a residual
-     sun-azimuth convention mismatch (USD az-from-+x vs MCARaTS saa).
-   - More photons (1e8 -> 1e9) + higher render samples to shrink MC noise.
-6. Then: 20-frame fly-through + one-pager leading with the validation figure.
+5. ~~Close the physics gap~~ RESOLVED to the extent planned: azimuth
+   convention fixed (compass SAA -> USD Rz = 180-SAA), cyclic-BC 3x3
+   tiling, 64 volume bounces. Remaining ~14% decomposed as Rayleigh
+   skylight in shadows (sun-only Cycles scene) + MC noise — documented as
+   postmortem material, not chased further.
+6. Hero fly-through + deliverables: see NEXT list at the top of this note.
 
 ## Conventions
 
