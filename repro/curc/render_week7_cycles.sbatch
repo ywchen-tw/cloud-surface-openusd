@@ -3,7 +3,7 @@
 #SBATCH --account=ucb744_asc1
 #SBATCH --nodes=1
 #SBATCH --ntasks=8
-#SBATCH --time=02:00:00
+#SBATCH --time=06:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=Yu-Wen.Chen@colorado.edu
 #SBATCH --output=sbatch-output_%x_%j.txt

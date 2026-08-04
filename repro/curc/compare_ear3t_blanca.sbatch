@@ -37,6 +37,7 @@ conda activate er3t
 USD_NPY="${1:-$OPENUSD_CLD_DATAROOT/renders/les_cloud_scene_cycles_NadirCamera/frame_0001.npy}"
 OUT_PREFIX="${2:-$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t}"
 PHOTONS="${3:-1e8}"
+EAR3T_H5="${4:-}"   # optional: path to a cached EaR3T h5 -> skip the MC run entirely
 
 if [ ! -f "$USD_NPY" ]; then
     echo "ERROR: USD radiance npy not found: $USD_NPY" >&2
@@ -47,12 +48,21 @@ fi
 echo "USD npy : $USD_NPY"
 echo "Out     : $OUT_PREFIX  (ncpu ${SLURM_NTASKS:-16})"
 
-python validation/compare_ear3t.py \
-    --run-ear3t \
-    --ncpu "${SLURM_NTASKS:-16}" \
-    --photons "$PHOTONS" \
-    --usd-npy "$USD_NPY" \
-    --out-prefix "$OUT_PREFIX"
+if [ -n "$EAR3T_H5" ]; then
+    echo "EaR3T h5: $EAR3T_H5 (cached — skipping MC run)"
+    python validation/compare_ear3t.py \
+        --ear3t-h5 "$EAR3T_H5" \
+        --ncpu "${SLURM_NTASKS:-16}" \
+        --usd-npy "$USD_NPY" \
+        --out-prefix "$OUT_PREFIX"
+else
+    python validation/compare_ear3t.py \
+        --run-ear3t \
+        --ncpu "${SLURM_NTASKS:-16}" \
+        --photons "$PHOTONS" \
+        --usd-npy "$USD_NPY" \
+        --out-prefix "$OUT_PREFIX"
+fi
 
 echo "Figure : ${OUT_PREFIX}_figure.png"
 echo "Metrics: ${OUT_PREFIX}_metrics.json"

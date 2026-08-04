@@ -1,5 +1,64 @@
 # Project Notes
 
+## Phase 8 Lessons: the Rendering-Artifact Saga (Cycles + UsdVol)
+
+Full catalog with root causes and evidence: `docs/rendering_artifacts.md`
+(10 artifacts). These are the transferable lessons, not the individual bugs.
+
+### What happened, in one paragraph
+
+Getting the real-LES cloud field from USD/VDB to validated pixels hit ten
+distinct artifacts. Most were caught quickly (VDB file-format silently too
+new for Blender, clouds rendering as dark smoke because Cycles defaults to
+zero volume bounces, OptiX zero-radiance boxes, a compass-vs-math sun-azimuth
+convention mismatch, non-cyclic tiling slicing clouds into flat walls). The
+expensive one was the stripe hunt: wavy scanline stripes over the surface in
+GPU hero frames survived THREE confident fixes — (1) replacing negative-scale
+mirrored volume instances with a voxel-baked mirror VDB, (2) forcing the GPU
+NanoVDB texture from HALF to FULL precision, (3) setting volume clipping
+0.001 -> 0. The actual cause was none of them: Blender's denoiser
+(OpenImageDenoise, ON by default) was streaking its own noisy 512-sample
+input. Proven by a two-job A/B on the worst frame: `--no-denoise` left pure
+grain and no stripes; 2048 samples with denoise left a clean smooth image.
+
+### Lessons learned
+
+1. **Distrust "GPU-only" (or any single-variable) framing until the A/B is
+   truly controlled.** "CPU clean, GPU striped" was a confound: every CPU
+   render was a 4096-sample nadir validation frame, every GPU render a
+   256-512-sample oblique hero frame. The device was never the variable —
+   sample count was. Three rounds of fixes targeted the wrong axis because
+   the two comparison sets differed in camera, samples, AND device at once.
+2. **Classify an artifact in image space vs world space before theorizing.**
+   Zooming in settled it in minutes: the stripes were strictly image-space
+   horizontal scanlines (1-3 px period), which no data/precision/step-size
+   mechanism can produce — those band along world-space iso-tau contours.
+   Post-process (denoiser) was the only remaining suspect class.
+3. **Renderer DEFAULTS are part of the physics.** Four defaults silently
+   changed results: volume bounces 0 (black clouds), volume clipping 1e-3
+   (discarded real beta on every device — corrupted the validation field,
+   not just the look), NanoVDB HALF precision, denoising ON. For any
+   quantitative pipeline, print/pin every relevant setting in the driver
+   rather than trusting factory values.
+4. **A refuted theory can still leave a good fix.** The baked-mirror VDB and
+   FULL-precision/clipping=0 changes didn't cure the stripes, but all are
+   kept: they remove real (latent) hazards and made the scene simpler.
+5. **Make A/Bs cheap and decisive.** Single-frame Slurm jobs (~1 min GPU)
+   with one flag changed (`--no-denoise`, `--device cpu`, `--hide-volumes`,
+   `--frame-step 10`) answered questions that hours of full-sequence renders
+   could not. The driver accumulating these isolation flags is itself a
+   diagnostic toolkit now.
+6. **Denoisers need clean input, not just any input.** Denoising is not a
+   substitute for samples in high-variance regions (dark surface behind a
+   scattering veil). Hero standard is now 2048 samples + denoise; the
+   optically-thin veil (the variance source) is cut from the hero VDB at
+   beta < 2e-3.
+7. **Output-dir hygiene is a correctness issue.** Stale frames from an old
+   scene/settings repeatedly masqueraded as "the fix didn't work" (or
+   vice versa). Rule: when the scene changes, archive the output dir
+   (`*_old`-suffix convention) before re-rendering; check job start time
+   against commit time before believing a render tested your fix.
+
 ## Week 5 Rendering Mistake: Shadow Point Sprites
 
 Week 5 initially drifted away from the Week 2/Week 4 shadow approach.

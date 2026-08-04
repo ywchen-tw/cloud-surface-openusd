@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=8
 #SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=Yu-Wen.Chen@colorado.edu
 #SBATCH --output=sbatch-output_%x_%j.txt

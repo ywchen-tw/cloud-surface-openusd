@@ -69,7 +69,9 @@ def enable_gpu(scene, device="auto"):
         scene.cycles.device = "CPU"
         return "CPU"
     prefs = bpy.context.preferences.addons["cycles"].preferences
-    order = ("CUDA",) if device == "cuda" else ("OPTIX",) if device == "optix" else ("OPTIX", "CUDA")
+    # auto never tries CUDA: it produces severe scanline banding on this
+    # volume (rendering_artifacts.md; CUDA is opt-in via --device cuda only).
+    order = ("CUDA",) if device == "cuda" else ("OPTIX",)
     for dev_type in order:
         try:
             prefs.compute_device_type = dev_type
@@ -81,6 +83,10 @@ def enable_gpu(scene, device="auto"):
                 d.use = d.type != "CPU"
             scene.cycles.device = "GPU"
             return dev_type
+    if device != "auto":
+        raise SystemExit(f"[curc] FATAL: requested device {device} unavailable on this node")
+    print("[curc] WARNING: OptiX unavailable on this node; falling back to CPU "
+          "(expect ~20-40x slower frames; resubmit elsewhere for GPU speed)")
     scene.cycles.device = "CPU"
     return "CPU"
 

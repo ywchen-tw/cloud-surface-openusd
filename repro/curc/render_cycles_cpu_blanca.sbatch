@@ -41,6 +41,10 @@ RUN_NAME="$(basename "${USD_SCENE%.*}")_cycles${CAMERA_ARG:+_${CAMERA_ARG}}"
 OUT_DIR="$OPENUSD_CLD_DATAROOT/renders/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
+# Drop 0-byte placeholders left by a preempted/requeued run so those frames
+# re-render (--skip-existing would otherwise treat them as done).
+find "$OUT_DIR" -name 'frame_*.png' -size 0 -delete
+
 echo "Scene: $USD_SCENE  frames $FRAME_START..$FRAME_END  samples $SAMPLES"
 echo "Out:   $OUT_DIR"
 

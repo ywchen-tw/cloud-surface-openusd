@@ -16,15 +16,18 @@ several of these silently corrupt *quantitative* results, not just images.
 | 8 | Surface reads as paper cutouts | Flat constant-color polygons have no multi-scale variation | any (authoring) | Procedural albedo *texture* (`gen_arctic_albedo.py`): fractal ice edge, floe field, feathered ponds. Also the physically meaningful quantity (albedo map). |
 | 9 | Stale frames poisoning comparisons | Re-rendering after scene/settings changes while old PNGs exist: Blanca's `--skip-existing` keeps them; and a running job uses the scene it loaded at startup | workflow | Empty/rename the output dir when the scene changes (`*_oldscene` convention); frame ranges beyond the authored `endTimeCode` render as static copies of the last timeSample. |
 | 10 | Validation-only geometry traps | Ortho aperture (Blender reads raw value as meters), AgX tone curve baked into PNGs, sun-azimuth conventions (er3t SAA is compass: 0=N, 90=E; USD Rz = 180−SAA) | — | `--exr` scene-linear + `.npy` dump; azimuth verified by cross-correlating shadow displacement against the τ map. |
+| 11 | Bright hard-edged slab boxes ("square volumes") over the surface, with faint diagonal hatch inside | **OptiX volume traversal over-brightening the thin-fringe NanoVDB regions** — the over-bright sibling of #3's zero-radiance boxes, same fragmented-leaf-topology root. NOT data and NOT the albedo texture: `--hide-volumes` render is clean; 2×2 A/B on frame 1 (2026-08-02): OPTIX shows slabs with BOTH the 2e-3 and 5e-3 min-beta VDBs; CPU is clean with both. `--volume-step-rate 0.25` does not help (slabs pixel-identical). Raising the VDB cut cannot fix it: active-voxel β is spread flat across 5e-3..0.09 (no gap), and 7.4% of the tile footprint is slab-only columns. | OptiX only | **CPU for ALL frames of this scene — hero included** (supersedes "GPU fine for hero"). ~11–13 min/frame at 720p/2048 on 32 cores, ~30 min at 1080p; chunk the sequence across parallel CPU jobs with `--skip-existing`. |
 
 ## Standing rules distilled
 
-- **Validation frames: CPU only.** OptiX has a proven volume artifact (#3);
-  CPU has been clean in every A/B test. (#6 was first booked as CUDA-specific
-  but is likely sample-count/denoiser-driven, not device-driven.)
-- **Hero/animation frames: GPU is fine** once the scene contains no
-  negative-scale volumes and no plain-tiled seams — spot-check with
-  `--frame-step 10` before committing to a full sequence.
+- **ALL frames on this fragmented volume: CPU only** (updated 2026-08-02).
+  OptiX has two proven volume artifacts on it — zero-radiance boxes (#3)
+  and over-bright slab boxes (#11) — and CUDA has scanline banding. CPU
+  has been clean in every A/B test. The old "GPU fine for hero frames"
+  rule is refuted by #11. GPU may return for future, less-fragmented
+  volumes (e.g. smoothed/upsampled grids) — re-A/B first.
+- The render driver's `--device auto` no longer falls back to CUDA
+  silently (OPTIX or loud CPU fallback; CUDA is explicit opt-in only).
 - **Denoised frames need clean input: 2048+ samples for oblique volume
   views.** 512 samples is enough radiometrically but the denoiser turns
   its residual noise into scanline streaks (#6).
