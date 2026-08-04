@@ -28,15 +28,109 @@ Also DONE 2026-08-02:
   (pass e.g. `MainCameraNoDN` to give a test run its own output dir while
   still selecting MainCamera).
 
-NEXT (in order):
-1. Spot-check the rebuilt-VDB scene, then the 100-frame 1080p website
-   master at 2048 samples (commands under Hero video below).
-2. Re-run the validation render + compare with the clipping=0 driver:
-   the r=0.988 run silently dropped beta in [5e-4,1e-3) on the USD side
-   (EaR3T kept it), so the headline number may shift slightly. Reuse the
-   cached 1e9-photon h5 via `--ear3t-h5` — only the Cycles render reruns.
-3. Deliverables: copy the validation figure into docs/, one-pager,
+UPDATE 2026-08-02 (second session): the 2048-sample masters came out bad.
+Diagnosis + fixes:
+- 1080p master (`_MainCamera`, Blanca 27307793) rendered on **CUDA** — the
+  driver's `auto` silently fell back when OptiX init failed on that node.
+  Violent scanline banding (row-stripe power 0.0119 vs 0.0030 striped-era
+  reference). Dir is dead — archive it. FIXED in driver: `auto` is now
+  OPTIX-or-CPU-with-warning; CUDA only via explicit `--device cuda`;
+  explicitly requested unavailable device aborts the job.
+- 720p master (`_MainCamera720p`, OPTIX) is stripe-clean (0.0014) but shows
+  the artifact-#4 hard-edged veil slabs + black shadow polygons — the 2e-3
+  cut did NOT remove them (slab beta is 2e-3..5e-3). Hero mirror VDB
+  REBUILT at **min_beta 5e-3**: 26,595 active voxels, worst-column tau
+  lost 2.56 (cloud tau_max ~53). Also de-fragments NanoVDB leaves (attacks
+  OptiX artifact #3's topology) and removes the denoiser's variance source.
+- `_MainCameraNoDN` / `_MainCameraHS` were the frame-81 denoiser A/B on the
+  OLD (pre-rebuild) VDB — superseded, archive.
+
+IN FLIGHT (check before launching anything):
+- Alpine 30732625: CPU spot check frames 1+81, 720p/2048, on the 2e-3 VDB
+  (loaded before the rebuild) -> `_MainCameraCPU`. Device-isolation
+  reference + CPU min/frame timing.
+- Blanca 27317411: OPTIX spot check frames 1-100 step 10, 1080p/2048, on
+  the NEW 5e-3 VDB -> `_MainCameraOptix5e3`. Gate for the full master:
+  squares gone + no scanlines + no exact-zero leaf-box pixels.
+- ~~Alpine 30732949 -> 30732950: clipping=0 validation rerun~~ DONE
+  2026-08-02 10:29: **r = 0.9880, rel RMSE 13.93%** — statistically
+  identical to the original 0.9880/13.90%. The silent beta drop in
+  [5e-4,1e-3) did NOT matter; the r=0.988 headline stands, now with clean
+  provenance. Results: `validation/usd_vs_ear3t_clip0_*`; old render
+  archived as `..._NadirCamera_preclip0_old`. compare_ear3t*.sbatch (both
+  clusters) gained optional 4th arg = cached h5 path (skips the MC run).
+- Blanca 27317176 (user-submitted): CPU spot frames 1+81 on the 2e-3 VDB
+  (imported pre-rebuild) -> `_MainCameraCPUblanca`. Same role as Alpine
+  30732625.
+- NOTE: user prefers Blanca-first for all submissions (memory updated).
+
+FINDING 2026-08-02 ~11:50 — the "square volumes" are an OPTIX ARTIFACT,
+not data: same frame 1, same region — OPTIX (2e-3 AND 5e-3 VDB) renders
+the thin fringe as bright hard-edged slab boxes with diagonal hatch;
+CPU (2e-3) renders it as soft faithful haze, zero squares. Over-bright
+sibling of artifact #3 (zero-radiance leaf boxes), same fragmented-NanoVDB
+root. "GPU fine for hero frames" is REFUTED for this scene. Surface-only
+render (`_MainCameraSurfOnly`) proved the albedo texture is clean.
+Stripes ARE fixed everywhere except CUDA (driver now blocks silent CUDA).
+A/B results (both landed ~12:05): CPU + 5e-3 VDB = CLEAN (stripe 0.00027,
+no squares — rebuilt VDB is good). OPTIX + `--volume-step-rate 0.25` =
+slabs pixel-identical (GPU route dead for this volume). Catalog entry
+#11 written; standing rule updated to CPU-for-all-frames.
+
+MASTER LAUNCHED 2026-08-02 ~12:15 — Blanca CPU jobs 27321648-27321652:
+5 chunks x 20 frames, 1080p, 2048 samples, `--time=12:00:00`,
+`--skip-existing` -> shared dir
+`renders/les_cloud_arctic_scene_cycles_MainCameraCPUmaster`.
+STATUS 2026-08-03 morning: chunks 3-5 COMPLETED (frames 41-100); chunks
+1-2 TIMEOUT at 12 h with frames 1-12 + 21-32 done. Cause: per-frame cost
+varies 15-60 min — EARLY frames (low camera, volume-filled view) run
+~58-60 min, late frames ~15 min. Recovery submitted: Blanca 27361389-92,
+4 frames each (13-16, 17-20, 33-36, 37-40), ~4 h worst case each.
+QUALITY VERIFIED on frames 1/50/81/100 at 1080p: stripe 0.00014-0.00022
+(below the 0.0004 clean floor), zero-pixels 0, no slabs — master is
+artifact-free. Rule of thumb for future CPU chunking: budget 60 min/frame
+for frames 1-40, 20 min/frame for 41-100.
+
+MASTER DONE 2026-08-03 ~11:54 — all 100 frames verified (contiguous
+1-100, no 0-byte, recovered frames 15/35 spot-checked: stripe 0.00018-
+0.00022, zero-pixels 0). Final `preview.mp4` assembled (12.5 s @ 8 fps,
+1080p, `module load ffmpeg` needed on login nodes) in
+`renders/les_cloud_arctic_scene_cycles_MainCameraCPUmaster/`.
+The HERO VIDEO DELIVERABLE IS COMPLETE.
+
+EXTENSION 2026-08-03: camera path extended to 200 frames in
+`author_arctic_hero.py` (segment-2 smoothstep, same NE drift; frames
+1-100 verified bit-identical to the rendered master; usdchecker clean;
+albedo texture NOT regenerated). Spot frames 101/134/167/200 clean
+(seam 100->101 diff 0.17/255 = seamless). COMPOSITION: by frame ~134
+the view is 93-95% uniform ice sheet (clouds exited). User chose the
+FULL 200-frame plan (calm ice-sheet ending kept): frames 101-150 on
+Blanca 27369671-75 (5x10 chunks, ~19 min/frame with clouds in view),
+frames 151-200 on Blanca 27369694 (single job, ~1 min/frame on ice).
+EXTENSION DONE 2026-08-03 22:10 — all 200 frames rendered and verified
+(no gaps, no 0-byte, recovered frames 119/120/122 clean at stripe
+0.00011); final `preview.mp4` = 25.0 s @ 8 fps 1080p in
+`renders/les_cloud_arctic_scene_cycles_MainCameraCPUmaster/`.
+Preemption lesson fixed in tooling: both render_cycles_cpu*.sbatch now
+delete stale 0-byte placeholders at startup (the GPU script already
+did) — a requeued chunk had skipped frame 122 over its own dead
+placeholder. THE 200-FRAME HERO VIDEO IS COMPLETE.
+
+NEXT (deliverables only — all rendering is done):
+1. Copy the validation figure into docs/
+   (`renders/validation/usd_vs_ear3t_clip0_figure.png` is the final one).
+2. One-pager leading with r=0.988 / rel RMSE 13.9%.
+3. Postmortem from docs/rendering_artifacts.md (11 artifacts).
+
+FUTURE (explicitly deferred 2026-08-03, only if GPU speed is needed for
+multi-timestep animation batches): GPU-rescue experiments — connectivity
+filter and/or upsample+smooth in grid_to_vdb.py, then re-A/B OptiX.
+Global cutoff is already ruled out (2e-2 kills all slabs but loses 34%
+of total tau; flat beta histogram means no safe threshold).
+2. Deliverables: copy the validation figure into docs/, one-pager,
    postmortem (artifact catalog is the source), final mp4 at 8 fps.
+   (Validation rerun is done — headline r=0.988 / 13.9% confirmed under
+   clipping=0; quote `usd_vs_ear3t_clip0_*` as the final artifacts.)
 
 ### Hero video pipeline (for the personal website)
 - Scene: `assets/phase8/les_cloud_arctic_scene.usda` from

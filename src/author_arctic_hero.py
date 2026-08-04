@@ -40,6 +40,7 @@ SURF_LO, SURF_HI = -25600.0, 38400.0
 OUT_USD = os.path.join(ROOT, "assets", "phase8", "les_cloud_arctic_scene.usda")
 SUN_SZA_DEG = 55.0   # polar low sun, long shadows
 FRAMES = 100
+EXTRA_FRAMES = 100   # segment-2 extension (frames 101-200), same NE drift
 FPS = 8              # matches the ffmpeg preview assembly in the sbatch scripts
 
 
@@ -126,6 +127,20 @@ def create_flythrough_camera(stage):
         tgt = tuple(a + t * (b - a) for a, b in zip(tgt_a, tgt_b))
         op.Set(look_at_matrix(eye, tgt), time=Usd.TimeCode(f))
 
+    # Segment 2 (frames FRAMES+1..FRAMES+EXTRA_FRAMES): continue the same NE
+    # drift from eye_b/tgt_b. Its own smoothstep starts from rest, matching
+    # segment 1's zero end-velocity (C1 seam at frame FRAMES). Frames
+    # 1..FRAMES are bit-identical to the original authoring. The view crosses
+    # the ice edge (~y 9.6 km) onto the melt-pond zone; camera ends at
+    # (12.8, 7.0) km — far inside the 38.4 km surface carpet.
+    eye_c = tuple(b + (b - a) for a, b in zip(eye_a, eye_b))
+    tgt_c = tuple(b + (b - a) for a, b in zip(tgt_a, tgt_b))
+    for f in range(FRAMES + 1, FRAMES + EXTRA_FRAMES + 1):
+        t = smoothstep((f - FRAMES) / EXTRA_FRAMES)
+        eye = tuple(b + t * (c - b) for b, c in zip(eye_b, eye_c))
+        tgt = tuple(b + t * (c - b) for b, c in zip(tgt_b, tgt_c))
+        op.Set(look_at_matrix(eye, tgt), time=Usd.TimeCode(f))
+
 
 def main():
     meta, size_x, size_y, size_z = load_domain()
@@ -137,7 +152,7 @@ def main():
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
     stage.SetMetadata("metersPerUnit", 1.0)
     stage.SetStartTimeCode(1)
-    stage.SetEndTimeCode(FRAMES)
+    stage.SetEndTimeCode(FRAMES + EXTRA_FRAMES)
     stage.SetTimeCodesPerSecond(FPS)
     stage.SetFramesPerSecond(FPS)
 
@@ -152,7 +167,7 @@ def main():
 
     stage.GetRootLayer().Save()
     print(f"wrote {OUT_USD}")
-    print(f"  surface {SURF_HI - SURF_LO:.0f} m, clouds 19200 m mirrored, frames 1-{FRAMES} @ {FPS} fps, SZA {SUN_SZA_DEG:.0f}")
+    print(f"  surface {SURF_HI - SURF_LO:.0f} m, clouds 19200 m mirrored, frames 1-{FRAMES + EXTRA_FRAMES} @ {FPS} fps, SZA {SUN_SZA_DEG:.0f}")
 
 
 if __name__ == "__main__":

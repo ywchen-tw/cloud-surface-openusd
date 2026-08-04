@@ -18,7 +18,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "data", "processed", "arctic_albedo_texture.png")
-N = 2048
+N = 3072   # 64 km surface span -> ~21 m/px
 RNG = np.random.default_rng(7)
 
 
@@ -52,16 +52,19 @@ def smooth(x, lo, hi):
 def main():
     y = np.linspace(0, 1, N)[:, None] * np.ones((1, N))  # 0 = south edge (v=0)
 
-    n_edge = fbm(N, octaves=6, base_cells=3)
-    n_floe = fbm(N, octaves=7, base_cells=12)
-    n_tex = fbm(N, octaves=7, base_cells=24)
-    n_pond = fbm(N, octaves=5, base_cells=16)
+    # The quad spans 64 km (author_arctic_hero SURF_LO/HI); octave cell
+    # counts are ~3.3x the 19.2-km originals so features keep their
+    # physical size (floes ~1 km, ponds ~300 m).
+    n_edge = fbm(N, octaves=6, base_cells=10)
+    n_floe = fbm(N, octaves=7, base_cells=40)
+    n_tex = fbm(N, octaves=7, base_cells=80)
+    n_pond = fbm(N, octaves=5, base_cells=53)
 
     # Consolidated sheet north of a fractal ice edge (~y = 0.55 +/- noise).
-    ice = smooth(y + 0.22 * (n_edge - 0.5), 0.55, 0.585)
+    ice = smooth(y + 0.10 * (n_edge - 0.5), 0.550, 0.561)
 
     # Marginal-ice-zone floes: noise blobs, densest just south of the edge.
-    mizw = np.exp(-(((y + 0.22 * (n_edge - 0.5)) - 0.47) / 0.13) ** 2)
+    mizw = np.exp(-(((y + 0.10 * (n_edge - 0.5)) - 0.47) / 0.045) ** 2)
     floes = smooth(n_floe, 0.62, 0.68) * mizw
     ice_all = np.clip(ice + floes, 0, 1)
 
@@ -70,7 +73,7 @@ def main():
     albedo += ice_all * (0.60 + 0.25 * n_tex - albedo)             # ice 0.6-0.85
     snow = smooth(n_tex, 0.62, 0.75) * ice * smooth(y, 0.7, 0.85)
     albedo += snow * (0.92 - albedo)                               # snow ~0.9
-    ponds = smooth(n_pond, 0.70, 0.76) * ice * smooth(y, 0.6, 0.7)
+    ponds = smooth(n_pond, 0.70, 0.76) * ice * smooth(y, 0.57, 0.62)
     albedo += ponds * (0.30 - albedo)                              # ponds ~0.3
 
     # Tint: water steel-blue, ice slightly cool white, ponds teal.
