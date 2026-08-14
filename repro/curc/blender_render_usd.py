@@ -113,6 +113,61 @@ def assign_cloud_material(obj, anisotropy, density_scale, ssa):
     obj.data.materials.append(mat)
 
 
+def assign_atmosphere_material(obj, anisotropy, density_scale, ssa):
+    """COMBINED cloud + molecular-atmosphere medium in ONE object. Cloud grid
+    'density' -> Principled Volume (HG g, ssa) exactly like the plain cloud
+    material; grid 'scatter' -> Volume Scatter (true Rayleigh phase when this
+    Blender exposes it, isotropic HG otherwise); grid 'absorb' -> Volume
+    Absorption. All Add-Shader'd together; each attribute reads 0 outside its
+    grid so the media coexist without overlapping-volume-object artifacts
+    (two separate volume objects lose the atmosphere's in-scattering inside
+    the cloud grid's sparse-node boxes — blocky deficits, 2026-08-14)."""
+    mat = bpy.data.materials.new("CloudAtmosphereCycles")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+
+    pv = nt.nodes.new("ShaderNodeVolumePrincipled")
+    pv.inputs["Density Attribute"].default_value = "density"
+    pv.inputs["Density"].default_value = density_scale
+    pv.inputs["Anisotropy"].default_value = anisotropy
+    pv.inputs["Color"].default_value = (ssa, ssa, ssa, 1.0)
+
+    attr_s = nt.nodes.new("ShaderNodeAttribute")
+    attr_s.attribute_name = "scatter"
+    sc = nt.nodes.new("ShaderNodeVolumeScatter")
+    nt.links.new(attr_s.outputs["Fac"], sc.inputs["Density"])
+    sc.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+    phase = "isotropic (HG g=0)"
+    if hasattr(sc, "phase"):
+        try:
+            sc.phase = "RAYLEIGH"
+            phase = "Rayleigh"
+        except TypeError:
+            pass
+    if phase != "Rayleigh" and "Anisotropy" in sc.inputs:
+        sc.inputs["Anisotropy"].default_value = 0.0
+
+    attr_a = nt.nodes.new("ShaderNodeAttribute")
+    attr_a.attribute_name = "absorb"
+    ab = nt.nodes.new("ShaderNodeVolumeAbsorption")
+    nt.links.new(attr_a.outputs["Fac"], ab.inputs["Density"])
+    ab.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+
+    add1 = nt.nodes.new("ShaderNodeAddShader")
+    nt.links.new(sc.outputs["Volume"], add1.inputs[0])
+    nt.links.new(ab.outputs["Volume"], add1.inputs[1])
+    add2 = nt.nodes.new("ShaderNodeAddShader")
+    nt.links.new(pv.outputs["Volume"], add2.inputs[0])
+    nt.links.new(add1.outputs["Shader"], add2.inputs[1])
+    nt.links.new(add2.outputs["Shader"], out.inputs["Volume"])
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+    print(f"[curc] cloud+atmosphere combined on '{obj.name}': "
+          f"molecular phase {phase}, cloud HG g={anisotropy}")
+
+
 def scene_bounds():
     lo = [1e30] * 3
     hi = [-1e30] * 3
@@ -192,7 +247,10 @@ def main():
     if not vols:
         print("[curc] WARNING: no volume object in scene — rendering surfaces only")
     for v in vols:
-        assign_cloud_material(v, args.anisotropy, args.density_scale, args.ssa)
+        if "atmosphere" in v.name.lower():
+            assign_atmosphere_material(v, args.anisotropy, args.density_scale, args.ssa)
+        else:
+            assign_cloud_material(v, args.anisotropy, args.density_scale, args.ssa)
         # GPU NanoVDB conversion defaults to reduced precision; quantized
         # density in the 1e-4..1e-1 range shows as banded stripes in surface
         # shadow transmittance (docs/rendering_artifacts.md). Full float +

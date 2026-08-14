@@ -44,10 +44,16 @@ SURFACE_ALBEDO = 0.05    # Lambertian; USD render must use --flat-albedo 0.05
 PHOTONS = 1e8
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NPZ = os.path.join(ROOT, "data", "processed", "cloud_field_64x64x32.npz")
+# Buffered benchmark (--buffered): 12.8 km compared region + 3.2 km of real
+# neighbors on every side (cloud_field.py --buffer). Cycles renders the open
+# box, MCARaTS wraps cyclically — both boundary treatments live only in the
+# buffer, which is cropped away before comparison.
+NPZ_BUFFERED = os.path.join(ROOT, "data", "processed",
+                            "cloud_field_192x192x32_buffered.npz")
 
 
-def load_field():
-    z = np.load(NPZ)
+def load_field(npz_path=NPZ):
+    z = np.load(npz_path)
     ext = np.array(z["ext"], dtype=np.float64)          # (nz, ny, nx), 1/m
     ext[ext < MIN_BETA] = 0.0
     dx_m = float(z["dx_m"])                             # 100 m
@@ -57,7 +63,7 @@ def load_field():
     return ext, dx_m, dz_m, g, ssa
 
 
-def run_ear3t(out_h5, ncpu=8, photons=PHOTONS, overwrite=False):
+def run_ear3t(out_h5, ncpu=8, photons=PHOTONS, overwrite=False, npz_path=NPZ):
     """Run EaR3T/MCARaTS 3D radiance on the npz field.
 
     Scaffolded from sim-rad-7SEAS_alpine_650.py (run_rad_sim_3d). Uses HG
@@ -69,7 +75,7 @@ def run_ear3t(out_h5, ncpu=8, photons=PHOTONS, overwrite=False):
     from er3t.pre.abs import abs_16g
     from er3t.rtm.mca import mca_atm_1d, mca_atm_3d
 
-    ext, dx_m, dz_m, g, ssa = load_field()
+    ext, dx_m, dz_m, g, ssa = load_field(npz_path)
     nz, ny, nx = ext.shape
     fdir = os.path.dirname(out_h5) or "."
     os.makedirs(fdir, exist_ok=True)
@@ -148,8 +154,11 @@ def load_ear3t(h5_path):
     return np.asarray(rad, dtype=np.float64).T, std
 
 
-def compare(usd, rt, out_prefix):
-    """Fit one global scale, then RMSE/Pearson + side-by-side figure."""
+def compare(usd, rt, out_prefix, extra=None, style="light"):
+    """Fit one global scale, then RMSE/Pearson + side-by-side figure.
+
+    style="dark": website/video styling (#16202c surface, light ink, CU-gold
+    1:1 line) — data panels keep viridis/RdBu; metrics are unaffected."""
     assert usd.shape == rt.shape, f"grid mismatch {usd.shape} vs {rt.shape}"
     mask = np.isfinite(usd) & np.isfinite(rt)
     scale = float((usd[mask] * rt[mask]).sum() / (usd[mask] ** 2).sum())
@@ -162,10 +171,27 @@ def compare(usd, rt, out_prefix):
                "pearson_r": r, "n_pixels": int(mask.sum()),
                "sza": SZA, "saa": SAA, "wavelength_nm": WAVELENGTH,
                "surface_albedo": SURFACE_ALBEDO, "min_beta": MIN_BETA}
+    if extra:
+        metrics.update(extra)
 
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
+    if style == "dark":
+        plt.style.use("dark_background")
+        plt.rcParams.update({
+            "figure.facecolor": "#16202c",   # video background
+            "axes.facecolor": "#16202c",
+            "savefig.facecolor": "#16202c",
+            "text.color": "#e8eaed",
+            "axes.labelcolor": "#e8eaed",
+            "xtick.color": "#9aa4ae",
+            "ytick.color": "#9aa4ae",
+            "axes.edgecolor": "#4a5563",
+        })
+    one_to_one = "#CFB87C" if style == "dark" else "k"
+    dots = "#8ab4f8" if style == "dark" else "C0"  # legible on the dark surface
 
     vmax = float(np.nanpercentile(rt, 99.5))
     fig, axes = plt.subplots(1, 4, figsize=(19, 4.6))
@@ -180,8 +206,9 @@ def compare(usd, rt, out_prefix):
                        vmax=0.3 * vmax if title == "difference" else vmax)
         ax.set_title(title)
         plt.colorbar(im, ax=ax, shrink=0.85)
-    axes[3].plot([0, vmax], [0, vmax], "k--", lw=1)
-    axes[3].plot(rt[mask].ravel(), usd_s[mask].ravel(), ".", ms=1, alpha=0.25)
+    axes[3].plot([0, vmax], [0, vmax], ls="--", color=one_to_one, lw=1)
+    axes[3].plot(rt[mask].ravel(), usd_s[mask].ravel(), ".", ms=1, alpha=0.25,
+                 color=dots)
     axes[3].set_xlabel("EaR3T radiance")
     axes[3].set_ylabel("USD render (scaled)")
     axes[3].set_title(f"r = {r:.4f}, rel. RMSE = {rel_rmse:.1f}%")
@@ -189,7 +216,7 @@ def compare(usd, rt, out_prefix):
         f"USD volume render vs EaR3T 3D-RT — identical LES cloud field "
         f"({WAVELENGTH:.0f} nm, SZA {SZA:.0f}°, albedo {SURFACE_ALBEDO})")
     fig.tight_layout()
-    fig.savefig(out_prefix + "_figure.png", dpi=180)
+    fig.savefig(out_prefix + "_figure.png", dpi=200 if style == "dark" else 180)
     with open(out_prefix + "_metrics.json", "w") as fh:
         json.dump(metrics, fh, indent=2)
     print(json.dumps(metrics, indent=2))
@@ -207,18 +234,40 @@ def main():
     p.add_argument("--ncpu", type=int, default=8)
     p.add_argument("--photons", type=float, default=PHOTONS,
                    help="MCARaTS photon count (default 1e8; 1e9 for the polished run)")
+    p.add_argument("--buffered", action="store_true",
+                   help="buffered benchmark: run on the 192x192 real-neighbor "
+                        "crop, compare only the central 12.8 km VAL region "
+                        "(USD render: les_cloud_scene_buffered.usda "
+                        "NadirCamera 256x256)")
+    p.add_argument("--style", choices=("light", "dark"), default="light",
+                   help="dark = website/video figure styling (#16202c surface)")
+    p.add_argument("--crop-margin", type=int, default=0,
+                   help="extra columns cropped from every edge of BOTH fields "
+                        "after alignment (belt-and-suspenders on top of the "
+                        "buffer; 4 = 400 m)")
     p.add_argument("--out-prefix", default=os.path.join(
         os.environ.get("OPENUSD_CLD_DATAROOT", ROOT), "renders", "validation", "usd_vs_ear3t"))
     args = p.parse_args()
 
+    npz_path = NPZ_BUFFERED if args.buffered else NPZ
+    h5_name = "ear3t_rad_3d_buffered.h5" if args.buffered else "ear3t_rad_3d.h5"
     os.makedirs(os.path.dirname(args.out_prefix), exist_ok=True)
     h5 = args.ear3t_h5
     if args.run_ear3t or h5 is None:
-        h5 = run_ear3t(os.path.join(os.path.dirname(args.out_prefix), "ear3t_rad_3d.h5"),
-                       ncpu=args.ncpu, photons=args.photons)
+        h5 = run_ear3t(os.path.join(os.path.dirname(args.out_prefix), h5_name),
+                       ncpu=args.ncpu, photons=args.photons, npz_path=npz_path)
 
     usd = np.load(args.usd_npy).astype(np.float64)
     rt, _ = load_ear3t(h5)
+    extra = {"buffered": args.buffered, "crop_margin": args.crop_margin,
+             "photons": args.photons}
+    if args.buffered:
+        # MCARaTS ran on the full 192x192 crop; keep only the compared VAL
+        # region. The USD render already frames exactly the VAL region.
+        pad = int(np.load(npz_path)["buffer_cols"])
+        assert rt.shape[0] > 2 * pad and rt.shape[1] > 2 * pad, rt.shape
+        rt = rt[pad:-pad, pad:-pad]
+        extra["buffer_cols"] = pad
     # USD npy is row 0 = top (image convention); EaR3T rad is (nx, ny) with
     # origin lower-left. VERIFY orientation by eye on the first figure and
     # adjust the flip/transpose here if the panels are mirrored.
@@ -231,7 +280,10 @@ def main():
         usd = usd.reshape(rt.shape[0], fy, rt.shape[1], fx).mean(axis=(1, 3))
     if usd.shape != rt.shape and usd.T.shape == rt.shape:
         usd = usd.T
-    compare(usd, rt, args.out_prefix)
+    if args.crop_margin > 0:
+        m = args.crop_margin
+        usd, rt = usd[m:-m, m:-m], rt[m:-m, m:-m]
+    compare(usd, rt, args.out_prefix, extra=extra, style=args.style)
 
 
 if __name__ == "__main__":

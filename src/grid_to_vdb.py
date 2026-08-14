@@ -51,7 +51,7 @@ def mirror3x3(beta_xyz):
 
 
 def main(raw_path: str, out_path: str, min_beta: float = MIN_BETA_DEFAULT,
-         mirror: bool = False) -> None:
+         mirror: bool = False, origin=None, roll=None) -> None:
     json_path = os.path.splitext(raw_path)[0] + ".json"
     with open(json_path) as fh:
         meta = json.load(fh)
@@ -76,6 +76,16 @@ def main(raw_path: str, out_path: str, min_beta: float = MIN_BETA_DEFAULT,
         # neighbors extend one tile west/south into negative coordinates).
         tx, ty = -nx * dx, -ny * dy
         beta_xyz = mirror3x3(beta_xyz)
+    if origin is not None:
+        # Explicit world origin (m) for the grid's (0,0) corner — bakes scene
+        # placement into the VDB transform so the USD prim stays untransformed.
+        tx, ty = origin
+    if roll is not None:
+        # Periodic wrap (cells). ONLY valid for the FULL LES domain, whose
+        # SAM cyclic lateral BCs make the wrap seamless — never roll a
+        # non-periodic crop (docs/rendering_artifacts.md #5). Used to place
+        # the field's dense cloud clusters along the hero camera corridor.
+        beta_xyz = np.roll(beta_xyz, (roll[0], roll[1]), axis=(0, 1))
 
     grid = vdb.FloatGrid()
     grid.copyFromArray(beta_xyz)
@@ -105,10 +115,22 @@ if __name__ == "__main__":
     do_mirror = "--mirror3x3" in argv
     if do_mirror:
         argv.remove("--mirror3x3")
+    origin = None
+    if "--origin" in argv:
+        i = argv.index("--origin")
+        origin = (float(argv[i + 1]), float(argv[i + 2]))
+        del argv[i:i + 3]
+    roll = None
+    if "--roll" in argv:
+        i = argv.index("--roll")
+        roll = (int(argv[i + 1]), int(argv[i + 2]))
+        del argv[i:i + 3]
     if len(argv) not in (2, 3):
         sys.exit(__doc__ + "\nOptional 3rd arg: min_beta cutoff in 1/m "
                  f"(default {MIN_BETA_DEFAULT:g}; 0 keeps the full field).\n"
-                 "Optional flag: --mirror3x3 (reflection-padded hero grid)")
+                 "Optional flag: --mirror3x3 (reflection-padded hero grid)\n"
+                 "Optional flag: --origin TX TY (world origin of grid corner, m)\n"
+                 "Optional flag: --roll RX RY (periodic wrap in cells; full domain only)")
     main(argv[0], argv[1],
          float(argv[2]) if len(argv) == 3 else MIN_BETA_DEFAULT,
-         mirror=do_mirror)
+         mirror=do_mirror, origin=origin, roll=roll)

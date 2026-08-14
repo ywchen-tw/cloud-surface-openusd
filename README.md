@@ -13,6 +13,18 @@ The early weeks build the visualization practice pipeline: bounded atmospheric d
 - Phase 8 ingestion is in progress: `src/cloud_field.py` extracts a cloudiest LES tile, computes physical extinction, and writes local processed artifacts.
 - The next major milestone is converting the real LES extinction field to VDB, rendering it, and comparing the rendered radiance against EaR3T.
 
+## Workflow Overview
+
+![Workflow scheme](docs/workflow_scheme.png)
+
+The pipeline runs left-to-right along the top row and right-to-left along the bottom: the real LES field is converted to physical extinction (`src/cloud_field.py`), written as an OpenVDB fog volume (`src/grid_to_vdb.py`), referenced by the OpenUSD hero stage (`src/author_arctic_hero.py`), rendered with Blender Cycles on CPU via Slurm chunks, verified frame-by-frame, and assembled into the video deliverable. The renders also carry a molecular atmosphere — Rayleigh scattering and trace-gas absorption on the same 0–20 km profile EaR3T uses — and the same extinction field feeds the EaR3T 3D-RT benchmark for the render-validation branch, so both sides of the comparison see identical clouds and identical molecular physics.
+
+Regenerate the figure with:
+
+```bash
+conda run -n er3t python src/make_workflow_diagram.py
+```
+
 ## Repository Layout
 
 ```text

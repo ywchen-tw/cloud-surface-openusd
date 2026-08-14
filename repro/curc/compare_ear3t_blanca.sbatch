@@ -18,7 +18,11 @@
 # the EaR3T run is the long part, so prefer Alpine amilan when its queue is ok.
 #
 # Usage:
-#   sbatch repro/curc/compare_ear3t_blanca.sbatch [usd_npy] [out_prefix] [photons]
+#   sbatch repro/curc/compare_ear3t_blanca.sbatch [usd_npy] [out_prefix] [photons] [ear3t_h5] ["extra flags"]
+# Buffered benchmark (12.8 km compared region, real-neighbor buffer):
+#   sbatch repro/curc/compare_ear3t_blanca.sbatch \
+#       $OPENUSD_CLD_DATAROOT/renders/les_cloud_scene_buffered_cycles_NadirCamera/frame_0001.npy \
+#       $OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t_buffered 1e9 "" "--buffered --crop-margin 4"
 
 set -euo pipefail
 
@@ -38,6 +42,7 @@ USD_NPY="${1:-$OPENUSD_CLD_DATAROOT/renders/les_cloud_scene_cycles_NadirCamera/f
 OUT_PREFIX="${2:-$OPENUSD_CLD_DATAROOT/renders/validation/usd_vs_ear3t}"
 PHOTONS="${3:-1e8}"
 EAR3T_H5="${4:-}"   # optional: path to a cached EaR3T h5 -> skip the MC run entirely
+EXTRA="${5:-}"      # extra compare_ear3t.py flags, e.g. "--buffered --crop-margin 4"
 
 if [ ! -f "$USD_NPY" ]; then
     echo "ERROR: USD radiance npy not found: $USD_NPY" >&2
@@ -54,14 +59,14 @@ if [ -n "$EAR3T_H5" ]; then
         --ear3t-h5 "$EAR3T_H5" \
         --ncpu "${SLURM_NTASKS:-16}" \
         --usd-npy "$USD_NPY" \
-        --out-prefix "$OUT_PREFIX"
+        --out-prefix "$OUT_PREFIX" $EXTRA
 else
     python validation/compare_ear3t.py \
         --run-ear3t \
         --ncpu "${SLURM_NTASKS:-16}" \
         --photons "$PHOTONS" \
         --usd-npy "$USD_NPY" \
-        --out-prefix "$OUT_PREFIX"
+        --out-prefix "$OUT_PREFIX" $EXTRA
 fi
 
 echo "Figure : ${OUT_PREFIX}_figure.png"

@@ -59,6 +59,8 @@ renders/*
 !renders/.gitkeep
 !renders/README.md
 *.png
+# Documentation figures are deliberately committed (data-policy allow-list).
+!docs/workflow_scheme.png
 *.jpg
 *.jpeg
 *.tif

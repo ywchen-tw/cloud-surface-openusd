@@ -40,6 +40,9 @@ TILE_NX = 64          # horizontal tile (x), native 100 m -> 6.4 km
 TILE_NY = 64          # horizontal tile (y)
 TILE_NZ = 64          # vertical crop, native 40 m -> 2.56 km (covers cloud layer)
 SIMPLE_NZ = 32        # regridded vertical levels (dz 40 m -> 80 m)
+BUFFER_COLS = 32      # buffered validation crop: 3.2 km of real neighbors/side
+VAL_NX = 128          # buffered-benchmark COMPARED region (12.8 km), centered
+VAL_NY = 128          # on the cloudiest 64x64 tile -> 4x the compared columns
 
 # --- physics constants ----------------------------------------------------
 R_DRY = 287.0         # J/(kg K)  dry-air gas constant
@@ -172,7 +175,90 @@ def quicklook(lwp, tile_yx, beta_native, x, y, z, out_png):
     plt.close(fig)
 
 
-def main():
+def export_full_domain(beta, x, y, z, dx_m, dz_m):
+    """Full-domain 480x480x32 extinction grid for the HERO scene (no tiling).
+
+    Same physics as the validation tile (identical beta field, z crop, and
+    optical-depth-conserving regrid) applied to the whole 48 km domain. The
+    validation artifacts are untouched — this is a visualization asset only.
+    """
+    beta_full = regrid_vertical(beta[:TILE_NZ], SIMPLE_NZ)
+    dz_simple = dz_m * (TILE_NZ // SIMPLE_NZ)
+    tau = beta_full.sum(axis=0) * dz_simple
+    nz, ny, nx = beta_full.shape
+    print(f"Full domain {nx}x{ny}x{nz}: dz={dz_simple:.0f} m  "
+          f"cloud-voxel frac={(beta_full > 0).mean():.4f}  "
+          f"beta_max={beta_full.max():.4f} 1/m  tau_max={tau.max():.1f}")
+    write_raw_grid(
+        beta_full, dx_m, dz_simple,
+        os.path.join(OUT_DIR, f"cloud_ext_{nx}x{ny}x{nz}.f32"),
+        os.path.join(OUT_DIR, f"cloud_ext_{nx}x{ny}x{nz}.json"),
+    )
+    print("Wrote", os.path.join("data/processed", f"cloud_ext_{nx}x{ny}x{nz}.f32"), "+ .json")
+
+
+def export_buffered_tile(beta, dx_m, dz_m):
+    """Buffered validation crop: a VAL_NX x VAL_NY (12.8 km) comparison region
+    centered on the cloudiest 64x64 tile, plus BUFFER_COLS (3.2 km) of REAL
+    neighboring clouds on every side -> 192x192x32 total (wrapping at the
+    full-domain edge is seamless — SAM cyclic lateral BCs).
+
+    Purpose: USD/Cycles renders an open box while MCARaTS wraps cyclically, so
+    edge pixels see different boundary physics. Both sides run on the full
+    crop and only the central VAL region is compared; each side's boundary
+    treatment is then ~3.2 km from any compared pixel — beyond the direct-beam
+    displacement (cloud-top 2.56 km * tan SZA30 ~ 1.5 km) and the ~1 km
+    horizontal diffusion length of multiply-scattered photons. Enlarging the
+    compared region 64->128 columns quadruples the comparison statistics and
+    spans thick cloud, thin cloud, and clear ocean.
+
+    World convention: the original tile keeps 0..6400 m, so the VAL region
+    spans -3200..9600 m and the full crop -6400..12800 m (VDB origin -6400).
+
+    Outputs: cloud_field_192x192x32_buffered.npz (EaR3T side) and
+    cloud_ext_192x192x32.f32/.json (VDB/Cycles side). The stored 64x64 tile
+    artifacts are untouched and the crop center is asserted bit-identical.
+    """
+    stored = np.load(os.path.join(OUT_DIR, "cloud_field_64x64x64.npz"))
+    ix, iy = (int(v) for v in stored["tile_origin_ix_iy"])
+    beta32 = regrid_vertical(beta[:TILE_NZ], SIMPLE_NZ)
+    dz_simple = dz_m * (TILE_NZ // SIMPLE_NZ)
+
+    pad = BUFFER_COLS
+    vx = ix - (VAL_NX - TILE_NX) // 2          # VAL-region origin (cells)
+    vy = iy - (VAL_NY - TILE_NY) // 2
+    ys = np.arange(vy - pad, vy + VAL_NY + pad) % beta32.shape[1]
+    xs = np.arange(vx - pad, vx + VAL_NX + pad) % beta32.shape[2]
+    buf = beta32[:, ys[:, None], xs[None, :]]
+
+    tile = np.load(os.path.join(OUT_DIR, "cloud_field_64x64x32.npz"))["ext"]
+    oy, ox = pad + (VAL_NY - TILE_NY) // 2, pad + (VAL_NX - TILE_NX) // 2
+    center = buf[:, oy:oy + TILE_NY, ox:ox + TILE_NX].astype(np.float32)
+    assert np.array_equal(center, tile), "buffered center != validated tile"
+
+    nz, ny, nx = buf.shape
+    tau = buf.sum(axis=0) * dz_simple
+    print(f"Buffered crop {nx}x{ny}x{nz}: VAL {VAL_NX}x{VAL_NY} centered on "
+          f"tile ({ix},{iy}), pad {pad}: cloud-voxel frac={(buf > 0).mean():.4f}  "
+          f"beta_max={buf.max():.4f} 1/m  tau_max={tau.max():.1f}  "
+          f"(center == validated tile: OK)")
+    save_npz(
+        os.path.join(OUT_DIR, f"cloud_field_{nx}x{ny}x{nz}_buffered.npz"),
+        ext=buf.astype(np.float32), dx_m=dx_m, dz_m=dz_simple,
+        ssa=SSA_VIS, asymmetry_g=ASYMMETRY_G,
+        buffer_cols=pad, val_nx=VAL_NX, val_ny=VAL_NY,
+        tile_origin_ix_iy=np.array([ix, iy]),
+    )
+    write_raw_grid(
+        buf, dx_m, dz_simple,
+        os.path.join(OUT_DIR, f"cloud_ext_{nx}x{ny}x{nz}.f32"),
+        os.path.join(OUT_DIR, f"cloud_ext_{nx}x{ny}x{nz}.json"),
+    )
+    print(f"Wrote data/processed/cloud_field_{nx}x{ny}x{nz}_buffered.npz "
+          f"+ cloud_ext_{nx}x{ny}x{nz}.f32/.json")
+
+
+def main(full_domain=False, buffered=False):
     os.makedirs(OUT_DIR, exist_ok=True)
     print(f"Loading LES field: {os.path.relpath(NC_PATH, PROJECT_ROOT)}")
     f = load_les(NC_PATH)
@@ -183,6 +269,13 @@ def main():
     qc_mask = qc > QC_THRESHOLD
     rho = air_density(p, tabs)
     beta = extinction_field(qc, rel, rho, qc_mask)          # (nz, ny, nx) 1/m
+
+    if full_domain:
+        export_full_domain(beta, x, y, z, dx_m, dz_m)
+        return
+    if buffered:
+        export_buffered_tile(beta, dx_m, dz_m)
+        return
 
     # full-domain LWP for tile selection (g/m2)
     lwc_full = qc * 1.0e-3 * rho
@@ -239,4 +332,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(full_domain="--full" in sys.argv[1:],
+         buffered="--buffer" in sys.argv[1:])

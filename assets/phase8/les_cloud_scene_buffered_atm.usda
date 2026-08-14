@@ -1,0 +1,106 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    kind = "assembly"
+)
+{
+    def "Surface"
+    {
+        def Mesh "Ocean" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            float3[] extent = [(-16000, -16000, 0), (22400, 22400, 0)]
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            rel material:binding = </World/Materials/OceanDark>
+            point3f[] points = [(-16000, -16000, 0), (22400, -16000, 0), (22400, 22400, 0), (-16000, 22400, 0)]
+            color3f[] primvars:displayColor = [(0.02, 0.09, 0.17)]
+        }
+    }
+
+    def "Materials"
+    {
+        def Material "OceanDark"
+        {
+            token outputs:surface.connect = </World/Materials/OceanDark/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.02, 0.09, 0.17)
+                float inputs:roughness = 0.9
+                float inputs:specular = 0.02
+                token outputs:surface
+            }
+        }
+    }
+
+    def Xform "CloudVolume"
+    {
+        def Volume "CloudAtmosphereVolume" (
+            customData = {
+                string source = "buffered LES cloud + EaR3T molecular atmosphere (make_atmosphere_profile.py -> atmosphere_to_vdb.py)"
+            }
+        )
+        {
+            float3[] extent = [(-16000, -16000, 0), (22400, 22400, 20000)]
+            custom rel field:absorb = </World/CloudVolume/CloudAtmosphereVolume/Absorb>
+            custom rel field:density = </World/CloudVolume/CloudAtmosphereVolume/Density>
+            custom rel field:scatter = </World/CloudVolume/CloudAtmosphereVolume/Scatter>
+
+            def OpenVDBAsset "Density"
+            {
+                token fieldClass = "fogVolume"
+                token fieldName = "density"
+                asset filePath = @../week7/vdbs/cloud_atmosphere_buffered.vdb@
+            }
+
+            def OpenVDBAsset "Scatter"
+            {
+                token fieldClass = "fogVolume"
+                token fieldName = "scatter"
+                asset filePath = @../week7/vdbs/cloud_atmosphere_buffered.vdb@
+            }
+
+            def OpenVDBAsset "Absorb"
+            {
+                token fieldClass = "fogVolume"
+                token fieldName = "absorb"
+                asset filePath = @../week7/vdbs/cloud_atmosphere_buffered.vdb@
+            }
+        }
+    }
+
+    def "Lighting"
+    {
+        def DistantLight "Sun"
+        {
+            float inputs:angle = 0.53
+            color3f inputs:color = (1, 0.985, 0.95)
+            float inputs:intensity = 2500
+            float xformOp:rotateX = 30
+            float xformOp:rotateZ = 140
+            uniform token[] xformOpOrder = ["xformOp:rotateZ", "xformOp:rotateX"]
+        }
+    }
+
+    def "Camera"
+    {
+        def Camera "NadirCamera"
+        {
+            float2 clippingRange = (100, 40000)
+            float horizontalAperture = 12800
+            token projection = "orthographic"
+            float verticalAperture = 12800
+            double3 xformOp:translate = (3200, 3200, 22000)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+    }
+}
+
