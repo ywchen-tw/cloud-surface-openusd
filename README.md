@@ -10,8 +10,9 @@ The early weeks build the visualization practice pipeline: bounded atmospheric d
 
 - Weeks 1-7 are implemented as reproducible OpenUSD scenes.
 - Week 7 authors a `UsdVol.Volume` backed by an OpenVDB density grid.
-- Phase 8 ingestion is in progress: `src/cloud_field.py` extracts a cloudiest LES tile, computes physical extinction, and writes local processed artifacts.
-- The next major milestone is converting the real LES extinction field to VDB, rendering it, and comparing the rendered radiance against EaR3T.
+- Phase 8 is complete: `src/cloud_field.py` ingests the real SAM-LES 7SEAS field (NetCDF), computes physical extinction, and `src/grid_to_vdb.py` converts it to an OpenVDB fog volume referenced by the USD hero stage.
+- The rendered nadir radiance has been validated against the EaR3T 3D radiative-transfer benchmark: **r = 0.988, relative RMSE 7.2%** on a buffered 12.8-km compared region, with a matched molecular atmosphere (Bodhaine Rayleigh + gray gas) on both sides of the comparison (`validation/compare_ear3t.py`).
+- A 200-frame full-domain Arctic hero fly-through (48-km LES domain) has been rendered on CPU via Slurm and assembled into a 25 s video.
 
 ## Workflow Overview
 
@@ -161,9 +162,9 @@ The local `openusd` Python environment can author `UsdVol`, but it does not have
 
 If Storm reports `Unknown field data type 'vdb'`, rebuild OpenUSD with `PXR_ENABLE_OPENVDB_SUPPORT=ON`.
 
-## Validation Target
+## Validation Result
 
-The final validation path is:
+The validation path is:
 
 1. Extract the real LES cloud tile.
 2. Compute extinction from cloud water and effective radius.
@@ -171,4 +172,8 @@ The final validation path is:
 4. Render a nadir radiance image from the USD scene.
 5. Compare the USD render against the EaR3T 3D-RT benchmark with RMSE or percent agreement.
 
-That side-by-side figure and quantitative agreement metric are the centerpiece of the project.
+Current agreement on the buffered benchmark (`validation/compare_ear3t.py --buffered`): **r = 0.988, relative RMSE 7.2%**, using 256 volume bounces, 8192 spp, and a molecular atmosphere matched to EaR3T's Bodhaine Rayleigh + gray-gas profile. That side-by-side figure and quantitative agreement metric are the centerpiece of the project.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 — see [LICENSE](LICENSE).
