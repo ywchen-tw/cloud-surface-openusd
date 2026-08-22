@@ -40,8 +40,11 @@ Diagnosis + fixes:
   the artifact-#4 hard-edged veil slabs + black shadow polygons — the 2e-3
   cut did NOT remove them (slab beta is 2e-3..5e-3). Hero mirror VDB
   REBUILT at **min_beta 5e-3**: 26,595 active voxels, worst-column tau
-  lost 2.56 (cloud tau_max ~53). Also de-fragments NanoVDB leaves (attacks
-  OptiX artifact #3's topology) and removes the denoiser's variance source.
+  lost 2.56 (cloud tau_max ~53). ~~Also de-fragments NanoVDB leaves (attacks
+  OptiX artifact #3's topology)~~ **WRONG — corrected 2026-08-22, see "GPU-path
+  postmortem" below: raising min_beta FRAGMENTS the leaves further (mean fill
+  14.4% -> 10.0%). The cut is cosmetic for #4 only, never a GPU fix.** It does
+  remove the denoiser's variance source (that part stands).
 - `_MainCameraNoDN` / `_MainCameraHS` were the frame-81 denoiser A/B on the
   OLD (pre-rebuild) VDB — superseded, archive.
 
@@ -203,6 +206,9 @@ multi-timestep animation batches): GPU-rescue experiments — connectivity
 filter and/or upsample+smooth in grid_to_vdb.py, then re-A/B OptiX.
 Global cutoff is already ruled out (2e-2 kills all slabs but loses 34%
 of total tau; flat beta histogram means no safe threshold).
+**SUPERSEDED 2026-08-22 — use the "TEST PLAN — GPU rescue" in the GPU-path
+postmortem section below: priority inverted (upsample+dilate is the lever,
+connectivity filter dropped), with a topology gate to run BEFORE any render.**
 2. Deliverables: copy the validation figure into docs/, one-pager,
    postmortem (artifact catalog is the source), final mp4 at 8 fps.
    (Validation rerun is done — headline r=0.988 / 13.9% confirmed under
@@ -419,6 +425,153 @@ match of the first benchmark).
 - Follow-up discussed, not started: heterogeneous Arctic surface benchmark
   (per-type Lambertian albedo map via `mca_sfc_2d`; BRDF only as EaR3T-side
   sensitivity — Cycles cannot match RPV/LSRT kernels).
+
+## GPU-path postmortem: measured VDB topology (2026-08-22)
+
+Re-read of `src/` + `repro/curc/` + the artifact catalog, with **leaf-occupancy
+statistics computed directly from `data/processed/cloud_ext_64x64x32.f32`**.
+Purpose: find out why every OptiX mitigation failed. It found one wrong
+assumption in this note and three live footguns in the driver.
+
+### Result 1 — the volume is pathologically fragmented at EVERY cut
+
+OpenVDB/NanoVDB leaves are 8³ = 512 voxels. Measured on the validation grid:
+
+| min_beta | active vox | leaves touched | mean leaf fill | leaves <12.5% full | exposed faces / active vox | 6-conn components |
+|---|---|---|---|---|---|---|
+| 0      | 8525 | 94/256 | 17.7% | 55.3% | 1.34 | 35 (14 singletons) |
+| 5e-4   | 5749 | 78/256 | 14.4% | 59.0% | 1.66 | 66 (25 singletons) |
+| 2e-3   | 4052 | 70/256 | 11.3% | 64.3% | 1.82 | 78 (31 singletons) |
+| 5e-3   | 2955 | 58/256 | 10.0% | 70.7% | 1.88 | 52 (30 singletons) |
+
+**Not one leaf node in the grid is ever full.** The active set has more
+boundary faces than interior voxels, and 27–40% of cloudy columns are ≤2
+voxels thick (100×100×80 m voxels — literal single-voxel slabs).
+
+Mechanism consistent with all the A/B evidence: Cycles wraps volume objects
+in a bounding mesh built from active voxels (thresholded by
+`Volume.render.clipping`, which `blender_render_usd.py:261` sets to `0.0`, so
+*every* nonzero voxel is enclosed). On this topology that mesh is thousands of
+near-coincident axis-aligned box faces. Artifacts #3 (zero-radiance boxes) and
+#11 (over-bright slab boxes) are the two signs of the same ray-interval error
+— miss an entry face → no medium → black box; miss an exit face → unbounded
+medium → bright box. Both axis-aligned, both OptiX-only, exact photometric
+opposites. (Inference from the render A/Bs, NOT verified against Cycles
+source — flag it as such in the postmortem.) It also explains why
+`--volume-step-rate 0.25` gave *pixel-identical* slabs: this is a traversal /
+geometry fault, not a step-size fault.
+
+### Result 2 — CORRECTION: raising `min_beta` made the OptiX cause WORSE
+
+This note (2026-08-02, line ~43) claimed the 5e-3 rebuild "de-fragments
+NanoVDB leaves (attacks OptiX artifact #3's topology)". **That is backwards.**
+Cutting β removes the interior-filling thin voxels, so occupancy falls
+17.7% → 10.0%, sparse leaves rise 55% → 71%, and the boundary-face ratio
+climbs 1.34 → 1.88. The 5e-3 rebuild cost **8.3% of total optical depth**
+(β percentiles p10 = 7.7e-5, p50 = 1.7e-3, p90 = 2.8e-2 — continuous over
+4.5 decades, no gap) to make the exact condition causing the artifact worse.
+
+That is why 2e-3 didn't fix it, why 5e-3 didn't fix it, and why the
+2026-08-02 A/B showed slabs with BOTH VDBs. `min_beta` is a **cosmetic
+control for artifact #4 (thin-veil slabs) only** — never cite it as a GPU fix
+again. The "flat beta histogram means no safe threshold" note was right, but
+the real objection is stronger: even a *safe* threshold would not have helped.
+
+### Result 3 — three live footguns in the driver (standing rule not enforced)
+
+Standing rule is "CPU only for all frames of this scene", but the code does
+not enforce it:
+
+1. `blender_render_usd.py:52` — `--device` still defaults to `auto` → OPTIX.
+   A forgotten flag silently renders the known-bad path.
+2. `repro/curc/render_week7_cycles.sbatch` and `..._blanca.sbatch` pass no
+   `--device` at all → both GPU wrappers still default to OptiX on this scene.
+3. `blender_render_usd.py:53-54` — `--device` help text still says *"use cpu
+   (or cuda) for validation renders"*. CUDA is now the WORST option (banding
+   power 0.0119 vs 0.0030 striped-era). Stale text recommending the thing
+   that killed the 1080p master.
+4. **No post-render device verification.** `main()` prints the *intended*
+   device (line 314) and never confirms what Cycles used; Cycles falls back to
+   CPU at render time on GPU init failure, logging only. The exact ambiguity
+   that poisoned the 1080p master (job 27307793) is still unclosed.
+
+### Reproduce the metric
+
+```bash
+/Users/wen/miniconda3/envs/er3t/bin/python - <<'PY'
+import json, numpy as np
+from scipy import ndimage
+m = json.load(open('data/processed/cloud_ext_64x64x32.json'))
+nx, ny, nz = m['nx'], m['ny'], m['nz']
+b = np.fromfile('data/processed/cloud_ext_64x64x32.f32', dtype=np.float32)
+b = b.reshape(nz, ny, nx).transpose(2, 1, 0)
+for cut in (0.0, 5e-4, 2e-3, 5e-3):
+    a = (b >= cut) & (b > 0) if cut > 0 else b > 0
+    px, py, pz = (-a.shape[0]) % 8, (-a.shape[1]) % 8, (-a.shape[2]) % 8
+    ap = np.pad(a, ((0, px), (0, py), (0, pz)))
+    L = ap.reshape(ap.shape[0]//8, 8, ap.shape[1]//8, 8, ap.shape[2]//8, 8)
+    L = L.transpose(0, 2, 4, 1, 3, 5).reshape(-1, 512)
+    occ = L.sum(1)[L.sum(1) > 0]
+    faces = 0
+    for ax in range(3):
+        faces += int((np.diff(a.astype(np.int8), axis=ax) != 0).sum())
+        for e in (0, -1):
+            sl = [slice(None)]*3; sl[ax] = e; faces += int(a[tuple(sl)].sum())
+    print(f"cut={cut:<7g} active={a.sum():6d} leaves={len(occ):4d} "
+          f"fill={occ.mean()/512*100:5.1f}% faces/vox={faces/a.sum():5.2f} "
+          f"components={ndimage.label(a)[1]}")
+PY
+```
+
+### TEST PLAN — GPU rescue (only if GPU speed is ever needed)
+
+Supersedes the deferred plan at line ~202 ("connectivity filter and/or
+upsample+smooth, then re-A/B OptiX"), with the priority inverted to match the
+measurements above. **Do not submit a render until step 2 passes.**
+
+1. **Build candidate grids** in `src/grid_to_vdb.py` (add flags; keep
+   `min_beta` untouched at 5e-4 for all of them — it is not the lever):
+   - `A` baseline: current 5e-4 VDB, unchanged (control).
+   - `B` dilate: 1-voxel morphological dilation of the active set with
+     tapered β into the new shell (β_new = 0.5 × mean of active neighbours),
+     preserving column τ by renormalising each column to its original value.
+   - `C` upsample 2×: trilinear interp to 128×128×64 (dx 50 m, dz 40 m),
+     τ-conserving; leaf count rises but occupancy rises faster.
+   - `D` = C then B (upsample, then dilate) — expected best.
+   - **Skip the connectivity filter entirely**: only 30 of 2955 active voxels
+     at 5e-3 are singletons; removing them changes nothing and loses τ.
+
+2. **GATE on topology, not on eyeballs.** Run the Reproduce-the-metric script
+   on each candidate. Proceed to render ONLY if:
+   - mean leaf fill **> 50%** (baseline 14.4%), AND
+   - exposed faces / active voxel **< 0.8** (baseline 1.66), AND
+   - total column τ within **1%** of baseline (per-column max |Δτ| < 2%).
+   If no candidate clears this, the GPU path stays dead — record the numbers
+   and stop. This gate costs seconds; a render costs hours.
+
+3. **Artifact A/B on frame 1** (the 2026-08-02 protocol, unchanged):
+   `1080p, 2048 spp, --device optix` vs `--device cpu`, same VDB, same scene.
+   Pass criteria, all three:
+   - exact-zero pixels in open sun = **0** (artifact #3),
+   - no hard-edged bright slab boxes vs the CPU frame — quantify as
+     max |OPTIX − CPU| over a 16×16 box filter **< 0.02** (artifact #11),
+   - row-stripe power **< 0.0004** (artifact #6 clean floor).
+   Also run `--hide-volumes` once to confirm the surface pass is clean, so a
+   failure cannot be blamed on the albedo texture.
+
+4. **Quantitative gate before trusting GPU for anything numeric:** re-run the
+   buffered EaR3T benchmark on the winning grid, CPU and OPTIX, same settings
+   (`--volume-bounces 256 --no-denoise`, 4096 spp, `--exr --world-strength 0
+   --flat-albedo 0.05`). GPU is only usable if it reproduces the CPU number
+   within MC noise (CPU reference: rel. RMSE 7.2%, r = 0.9877). A grid change
+   also moves the physics, so compare **GPU-vs-CPU on the same grid**, not
+   against the 7.2% headline.
+
+5. **If it passes**, GPU returns for *hero/animation frames only*, and the
+   driver footguns above must be closed first (explicit `--device` in the
+   sbatch wrappers + post-render device assertion). Validation renders stay
+   CPU regardless — cheap at 128² / 256², and the whole r = 0.988 provenance
+   depends on them.
 
 ## Conventions
 
